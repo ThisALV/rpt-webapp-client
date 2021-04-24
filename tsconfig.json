@@ -14,6 +14,12 @@
     "experimentalDecorators": true,
     "moduleResolution": "node",
     "importHelpers": true,
+    "paths": {
+      "rpt-webapp-client": [
+        "dist/rpt-webapp-client/rpt-webapp-client",
+        "dist/rpt-webapp-client"
+      ]
+    },
     "target": "es2015",
     "module": "es2020",
     "lib": [

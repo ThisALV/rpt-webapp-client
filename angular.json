@@ -3,5 +3,46 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
-  }
+    "rpt-webapp-client": {
+      "projectType": "library",
+      "root": "projects/rpt-webapp-client",
+      "sourceRoot": "projects/rpt-webapp-client/src",
+      "prefix": "lib",
+      "architect": {
+        "build": {
+          "builder": "@angular-devkit/build-angular:ng-packagr",
+          "options": {
+            "tsConfig": "projects/rpt-webapp-client/tsconfig.lib.json",
+            "project": "projects/rpt-webapp-client/ng-package.json"
+          },
+          "configurations": {
+            "production": {
+              "tsConfig": "projects/rpt-webapp-client/tsconfig.lib.prod.json"
+            }
+          }
+        },
+        "test": {
+          "builder": "@angular-devkit/build-angular:karma",
+          "options": {
+            "main": "projects/rpt-webapp-client/src/test.ts",
+            "tsConfig": "projects/rpt-webapp-client/tsconfig.spec.json",
+            "karmaConfig": "projects/rpt-webapp-client/karma.conf.js"
+          }
+        },
+        "lint": {
+          "builder": "@angular-devkit/build-angular:tslint",
+          "options": {
+            "tsConfig": [
+              "projects/rpt-webapp-client/tsconfig.lib.json",
+              "projects/rpt-webapp-client/tsconfig.spec.json"
+            ],
+            "exclude": [
+              "**/node_modules/**"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "defaultProject": "rpt-webapp-client"
 }
