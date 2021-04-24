@@ -1,16 +1,10 @@
 import { NgModule } from '@angular/core';
-import { RptWebappClientComponent } from './rpt-webapp-client.component';
-
 
 
 @NgModule({
-  declarations: [
-    RptWebappClientComponent
-  ],
+  declarations: [],
   imports: [
   ],
-  exports: [
-    RptWebappClientComponent
-  ]
+  exports: []
 })
-export class RptWebappClientModule { }
+export class RptWebappClientModule {}
