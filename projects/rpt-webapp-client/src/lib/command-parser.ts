@@ -54,18 +54,49 @@ export class CommandParser {
    */
   parseTo(schemes: ArgumentScheme[]): CommandParser {
     const argumentsToParse: number = schemes.length;
-    const parsedWordsQueue: string[] = this.unparsed.trim().split(' ', argumentsToParse);
+    const parsedWords: string[] = [];
+
+    let currentCharIndex = 0; // String to parse beginning
+    let wordBegin = currentCharIndex; // Begin words parsing from string beginning
+    let wordLength = 0; // No words currently parsed at initialization
+
+    // Continue words parsing while expected number of arguments isn't reached and string isn't completely parsed
+    while (currentCharIndex < this.unparsed.length && parsedWords.length < argumentsToParse) {
+      const currentChar: string = this.unparsed[currentCharIndex];
+
+      if (currentChar === ' ') { // If words separator is met
+        if (wordLength !== 0) { // if word is currently into parsing stage, push that words into queue
+          parsedWords.push(this.unparsed.substr(wordBegin, wordLength));
+          wordLength = 0; // Ready to parse a new word
+        }
+      } else { // If words is currently being parsed
+        if (wordLength === 0) { // If it is a new word...
+          wordBegin = currentCharIndex; // ...then its position must be saved
+        }
+
+        wordLength++;
+      }
+
+      currentCharIndex++; // Char handled, go to next
+    }
+
+    if (wordLength !== 0) { // If a word was in parsing stage when parsing stopped, pushes it into queue
+      parsedWords.push(this.unparsed.substr(wordBegin, wordLength));
+    }
+
+    const parsedWordsQueue: string[] = parsedWords.reverse(); // Enables FIFO order because neither push_back() nor pop_back() is available
 
     if (parsedWordsQueue.length < argumentsToParse) { // Checks to have enough arguments before beginning iteration
       throw new BadArgumentScheme(`Not enough arguments to parse: expected ${argumentsToParse}, got ${parsedWordsQueue.length}`);
     }
 
-    // Calculates total parsed length to take correct substring as unparsed part
-    const parsedLength: number = parsedWordsQueue.reduce(
-      ((previousValue, currentValue) => previousValue + currentValue), ''
-    ).length;
+    // Flushes string until next non-separator char is met
+    while (currentCharIndex < this.unparsed.length && this.unparsed[currentCharIndex] === ' ') {
+      currentCharIndex++;
+    }
 
-    const newParser: CommandParser = new CommandParser(this.unparsed.substr(parsedLength), this.parsedData);
+    // Copies current parser to modify it during arguments parsing iteration
+    const newParser: CommandParser = new CommandParser(this.unparsed.substr(currentCharIndex), this.parsedData);
 
     for (const argument of schemes) {
       if (newParser.parsedData[argument.name] !== undefined) { // Checks for argument name to be available

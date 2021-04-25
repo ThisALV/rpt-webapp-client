@@ -40,6 +40,15 @@ describe('CommandParser', () => {
     const result: CommandParser = parser.parseTo([{ name: '1', type: String }, { name: '2', type: String }]);
 
     // Two first words should have been parsed, the two last remain unparsed
-    expect(result).toEqual(new CommandParser(' c d', { 1: 'a', 2: 'b' }));
+    expect(result).toEqual(new CommandParser('c d', { 1: 'a', 2: 'b' }));
+  });
+
+  it('should trim extra spaces between parsed args only', () => {
+    const parser: CommandParser = new CommandParser('    a    b  c   d ');
+
+    const result: CommandParser = parser.parseTo([{ name: '1', type: String }, { name: '2', type: String }]);
+
+    // Two first words should have been parsed without their extra spaces, the lost last should keep their extra spaces
+    expect(result).toEqual(new CommandParser('c   d ', { 1: 'a', 2: 'b' }));
   });
 });
