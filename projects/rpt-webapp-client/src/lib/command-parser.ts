@@ -65,7 +65,7 @@ export class CommandParser {
       ((previousValue, currentValue) => previousValue + currentValue), ''
     ).length;
 
-    const newParser: CommandParser = new CommandParser(this.parsedData, this.unparsed.substr(parsedLength));
+    const newParser: CommandParser = new CommandParser(this.unparsed.substr(parsedLength), this.parsedData);
 
     for (const argument of schemes) {
       if (newParser.parsedData[argument.name] !== undefined) { // Checks for argument name to be available
