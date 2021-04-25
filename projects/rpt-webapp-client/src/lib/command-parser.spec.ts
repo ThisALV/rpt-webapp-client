@@ -5,15 +5,15 @@ describe('CommandParser', () => {
   it('should throw if there is not enough args to parse', () => {
     const parser: CommandParser = new CommandParser('a b');
 
-    expect(parser.parseTo([{ name: '1', type: String }, { name: '2', type: String }, { name: '3', type: String }]))
-      .toThrow(BadArgumentScheme);
+    expect(() => parser.parseTo([{ name: '1', type: String }, { name: '2', type: String }, { name: '3', type: String }]))
+      .toThrowError(BadArgumentScheme);
   });
 
   it('should throw if the same arg name appears at least two times', () => {
     const parser: CommandParser = new CommandParser('a b c d');
 
-    expect(parser.parseTo([{ name: '1', type: String }, { name: '2', type: String }, { name: '1', type: String }]))
-      .toThrow(BadArgumentScheme);
+    expect(() => parser.parseTo([{ name: '1', type: String }, { name: '2', type: String }, { name: '1', type: String }]))
+      .toThrowError(BadArgumentScheme);
   });
 
   it('should parse as-it String-converter arguments', () => {
