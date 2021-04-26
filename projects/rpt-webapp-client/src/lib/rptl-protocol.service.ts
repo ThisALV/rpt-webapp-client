@@ -100,6 +100,8 @@ export class RptlProtocolService {
     this.messagingInterface = new Subject<string>(); // Sending/receiving message when not connected does
 
     this.lastActorsValue = []; // Can be empty at initialization, doesn't matter because actors member isn't initialized yet
+    this.serCommands.complete(); // No running session, no SER Command to retrieve
+    this.messagingInterface.complete(); // No running session, no RPTL message to handle
 
     // Initalizes command handlers for each RPTL mode
 
@@ -117,7 +119,7 @@ export class RptlProtocolService {
   }
 
   /**
-   * Complete/error SER Protocol commands and actors list subjects depending on optional error argument
+   * Complete/error SER Protocol commands, messaging interface and actors list subjects depending on optional error argument
    *
    * @param error Message for session end error cause, if any
    * @private
@@ -127,9 +129,11 @@ export class RptlProtocolService {
       const errorMessage: string = error as string;
 
       this.serCommands.error(errorMessage);
+      this.messagingInterface.error(errorMessage);
       this.actors?.error(errorMessage);
     } else { // If terminated properly
       this.serCommands.complete();
+      this.messagingInterface.complete();
       this.actors?.complete();
     }
   }
