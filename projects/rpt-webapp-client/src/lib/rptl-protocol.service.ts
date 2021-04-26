@@ -44,6 +44,12 @@ export class BadServerMessage extends Error {
 }
 
 
+// Provides handler for a specific command invoked by server
+type Handler = (parsedCommand: CommandParser) => void;
+// Provides available commands and their handler for a specific RPTL Protocol mode
+type CommandHandlers = { [command: string]: Handler };
+
+
 /**
  * Implements RPTL protocol through its messaging interface which is a strings subject to send and receive RPTL messages.
  *
@@ -67,6 +73,11 @@ export class RptlProtocolService {
    */
   serCommands: Subject<string>;
 
+  // Handlers to call for eah command invoked by server on registered mode
+  private readonly registeredCommandHandlers: CommandHandlers;
+  // Same for unregistered mode
+  private readonly unregisteredCommandHandlers: CommandHandlers;
+
   // RPTL protocol mode (registered/unregistered)
   private registeredMode: boolean;
   // Current actor owned by this client
@@ -89,6 +100,20 @@ export class RptlProtocolService {
     this.messagingInterface = new Subject<string>(); // Sending/receiving message when not connected does
 
     this.lastActorsValue = []; // Can be empty at initialization, doesn't matter because actors member isn't initialized yet
+
+    // Initalizes command handlers for each RPTL mode
+
+    this.registeredCommandHandlers = {
+      INTERRUPT: (parsedCommand: CommandParser) => this.handleInterruptCommand(parsedCommand),
+      SERVICE: (parsedCommand: CommandParser) => this.handleServiceCommand(parsedCommand),
+      LOGGED_IN: (parsedCommand: CommandParser) => this.handleLoggedInCommand(parsedCommand),
+      LOGGED_OUT: (parsedCommand: CommandParser) => this.handleLoggedOutCommand(parsedCommand)
+    };
+
+    this.unregisteredCommandHandlers = {
+      AVAILABILITY: (parsedCommand: CommandParser) => this.handleAvailabilityCommand(parsedCommand),
+      REGISTRATION: (parsedCommand: CommandParser) => this.handleRegistrationCommand(parsedCommand)
+    };
   }
 
   /**
@@ -127,123 +152,116 @@ export class RptlProtocolService {
     }
 
     const invokedCommandName: string = parsedCommand.parsedData.rptlCommand;
+    let invokedCommandHandler: Handler;
 
-    // Available commands will depends on current RPTL protocol mode
+    // Available command handlers will depends on current RPTL protocol mode
     if (this.registeredMode) {
-      switch (invokedCommandName) {
-        case 'INTERRUPT': {
-          if (parsedCommand.unparsed.length === 0) {
-            this.clearSession();
-          } else { // If any error message argument is provided, then dispatch error too
-            this.clearSession(parsedCommand.unparsed);
-          }
-
-          break;
-        }
-        case 'SERVICE': {
-          // Provides RPTL command argument which is an RPTL command to SER Protocol subject
-          this.serCommands.next(parsedCommand.unparsed);
-
-          break;
-        }
-        case 'LOGGED_IN': {
-          // Parses LOGGED_IN <uid> <name> arguments to know about new actor data
-          let parsedArguments: CommandParser;
-          try {
-            parsedArguments = parsedCommand.parseTo([
-              { name: 'uid', type: Number }, { name: 'name', type: String }
-            ]);
-          } catch (err) {
-            throw new BadServerMessage(err.message);
-          }
-
-          // Actor who just logged on
-          const newActor: Actor = new Actor(parsedCommand.parsedData.uid, parsedCommand.parsedData.name);
-
-          // If just registered, it might be our own actor. In this case it must be ignored.
-          if (newActor.uid !== this.selfActor?.uid) {
-            // Pushes parsed actor data to last actors value
-            this.lastActorsValue.push();
-            // Then update subject with that value
-            this.actors?.next(this.lastActorsValue);
-          }
-
-          break;
-        }
-        case 'LOGGED_OUT': {
-          // Parses uid argument to known which actor just logged out
-          let parsedArguments: CommandParser;
-          try {
-            parsedArguments = parsedCommand.parseTo([{ name: 'uid', type: Number }]);
-          } catch (err) {
-            throw new BadServerMessage(err.message);
-          }
-
-          // Keep each actor which hasn't UID of the logged out one
-          this.lastActorsValue = this.lastActorsValue.filter((actor: Actor) => actor.uid !== parsedArguments.parsedData.uid);
-          // Then update subject with new value
-          this.actors?.next(this.lastActorsValue);
-
-          break;
-        }
-        default: { // If no checked command matched, then command is unknown
-          throw new BadServerMessage(`Unavailable command: ${invokedCommandName}`);
-        }
-      }
+      invokedCommandHandler = this.registeredCommandHandlers[invokedCommandName];
     } else {
-      switch (invokedCommandName) {
-        case 'AVAILABILITY': {
-          // Parses actors_count and max_actors_number arguments
-          let parsedArguments: CommandParser;
-          try {
-            parsedArguments = parsedCommand.parseTo([
-              { name: 'actorsCount', type: Number }, { name: 'maxActorsNumber', type: Number }
-            ]);
-          } catch (err) {
-            throw new BadServerMessage(err.message);
-          }
-
-          // Updates subject with new received server status
-          this.availability?.next(new Availability(parsedCommand.parsedData.actorsCount, parsedCommand.parsedData.maxActorsNumber));
-
-          break;
-        }
-        case 'REGISTRATION': {
-          // Arguments repeated for each actor already connected
-          const actorArgumentsScheme: ArgumentScheme[] = [
-            { name: 'uid', type: Number }, { name: 'name', type: String }
-          ];
-
-          // Reset last value for actors list subject
-          this.lastActorsValue = [];
-
-          // Parses each connected actor, begging with all RPTL command arguments
-          let currentParsedActor: CommandParser = parsedCommand;
-          // While there is still arguments to parse, tries to parse next already connected actor
-          while (currentParsedActor.unparsed.length !== 0) {
-            try {
-              // Takes 2 next arguments, then prepares to parse for next actor with reassignement
-              currentParsedActor = currentParsedActor.parseTo(actorArgumentsScheme);
-            } catch (err) {
-              throw new BadServerMessage(err.message);
-            }
-
-            // Pushes just parsed connected actor
-            this.lastActorsValue.push(new Actor(currentParsedActor.parsedData.uid, currentParsedActor.parsedData.name));
-          }
-
-          // Initializes connected actors subject as client has just been registered with that confirmation message
-          this.actors = new Subject<Actor[]>();
-          // Updates value with initially connected actors
-          this.actors.next(this.lastActorsValue);
-
-          break;
-        }
-        default: { // If no checked command matched, then command is unknown
-          throw new BadServerMessage(`Unavailable command: ${invokedCommandName}`);
-        }
-      }
+      invokedCommandHandler = this.unregisteredCommandHandlers[invokedCommandName];
     }
+
+    if (invokedCommandHandler === undefined) { // If command was not found in handlers registry, then it isn't available
+      throw new BadServerMessage(`Unavailable command: ${invokedCommandName}`);
+    }
+
+    invokedCommandHandler(parsedCommand);
+  }
+
+  private handleInterruptCommand(parsedCommand: CommandParser): void {
+    if (parsedCommand.unparsed.length === 0) {
+      this.clearSession();
+    } else { // If any error message argument is provided, then dispatch error too
+      this.clearSession(parsedCommand.unparsed);
+    }
+  }
+
+  private handleServiceCommand(parsedCommand: CommandParser): void {
+    // Provides RPTL command argument which is an RPTL command to SER Protocol subject
+    this.serCommands.next(parsedCommand.unparsed);
+  }
+
+  private handleLoggedInCommand(parsedCommand: CommandParser): void {
+    // Parses LOGGED_IN <uid> <name> arguments to know about new actor data
+    let parsedArguments: CommandParser;
+    try {
+      parsedArguments = parsedCommand.parseTo([
+        { name: 'uid', type: Number }, { name: 'name', type: String }
+      ]);
+    } catch (err) {
+      throw new BadServerMessage(err.message);
+    }
+
+    // Actor who just logged on
+    const newActor: Actor = new Actor(parsedArguments.parsedData.uid, parsedArguments.parsedData.name);
+
+    // If just registered, it might be our own actor. In this case it must be ignored.
+    if (newActor.uid !== this.selfActor?.uid) {
+      // Pushes parsed actor data to last actors value
+      this.lastActorsValue.push();
+      // Then update subject with that value
+      this.actors?.next(this.lastActorsValue);
+    }
+  }
+
+  private handleLoggedOutCommand(parsedCommand: CommandParser): void {
+    // Parses uid argument to known which actor just logged out
+    let parsedArguments: CommandParser;
+    try {
+      parsedArguments = parsedCommand.parseTo([{ name: 'uid', type: Number }]);
+    } catch (err) {
+      throw new BadServerMessage(err.message);
+    }
+
+    // Keep each actor which hasn't UID of the logged out one
+    this.lastActorsValue = this.lastActorsValue.filter((actor: Actor) => actor.uid !== parsedArguments.parsedData.uid);
+    // Then update subject with new value
+    this.actors?.next(this.lastActorsValue);
+  }
+
+  private handleAvailabilityCommand(parsedCommand: CommandParser): void {
+    // Parses actors_count and max_actors_number arguments
+    let parsedArguments: CommandParser;
+    try {
+      parsedArguments = parsedCommand.parseTo([
+        { name: 'actorsCount', type: Number }, { name: 'maxActorsNumber', type: Number }
+      ]);
+    } catch (err) {
+      throw new BadServerMessage(err.message);
+    }
+
+    // Updates subject with new received server status
+    this.availability?.next(new Availability(parsedArguments.parsedData.actorsCount, parsedArguments.parsedData.maxActorsNumber));
+  }
+
+  private handleRegistrationCommand(parsedCommand: CommandParser): void {
+    // Arguments repeated for each actor already connected
+    const actorArgumentsScheme: ArgumentScheme[] = [
+      { name: 'uid', type: Number }, { name: 'name', type: String }
+    ];
+
+    // Reset last value for actors list subject
+    this.lastActorsValue = [];
+
+    // Parses each connected actor, begging with all RPTL command arguments
+    let currentParsedActor: CommandParser = parsedCommand;
+    // While there is still arguments to parse, tries to parse next already connected actor
+    while (currentParsedActor.unparsed.length !== 0) {
+      try {
+        // Takes 2 next arguments, then prepares to parse for next actor with reassignement
+        currentParsedActor = currentParsedActor.parseTo(actorArgumentsScheme);
+      } catch (err) {
+        throw new BadServerMessage(err.message);
+      }
+
+      // Pushes just parsed connected actor
+      this.lastActorsValue.push(new Actor(currentParsedActor.parsedData.uid, currentParsedActor.parsedData.name));
+    }
+
+    // Initializes connected actors subject as client has just been registered with that confirmation message
+    this.actors = new Subject<Actor[]>();
+    // Updates value with initially connected actors
+    this.actors.next(this.lastActorsValue);
   }
 
   /**
