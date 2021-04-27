@@ -415,6 +415,6 @@ export class RptlProtocolService {
     this.selfActor = new Actor(uid, name);
 
     // Formats and send RPTL registration command
-    this.sendMessage(`REGISTRATION ${uid} ${name}`);
+    this.sendMessage(`LOGIN ${uid} ${name}`);
   }
 }
