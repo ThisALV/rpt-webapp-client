@@ -268,6 +268,9 @@ export class RptlProtocolService {
     this.actors = new Subject<Actor[]>();
     // Updates value with initially connected actors
     this.actors.next(this.lastActorsValue);
+
+    // Finally, set registered mode for RPTL Protocol
+    this.registeredMode = true;
   }
 
   /**
