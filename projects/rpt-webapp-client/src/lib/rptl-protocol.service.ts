@@ -119,7 +119,7 @@ export class RptlProtocolService {
   }
 
   /**
-   * Complete/error SER Protocol commands, messaging interface and actors list subjects depending on optional error argument
+   * Complete/error every subject depending on optional error argument
    *
    * @param error Message for session end error cause, if any
    * @private
@@ -131,10 +131,12 @@ export class RptlProtocolService {
       this.serCommands.error(errorMessage);
       this.messagingInterface.error(errorMessage);
       this.actors?.error(errorMessage);
+      this.availability?.error(errorMessage);
     } else { // If terminated properly
       this.serCommands.complete();
       this.messagingInterface.complete();
       this.actors?.complete();
+      this.availability?.complete();
     }
   }
 
@@ -294,6 +296,7 @@ export class RptlProtocolService {
     // Reset state
     this.registeredMode = false;
     this.actors = undefined;
+    this.availability = new Subject<Availability>();
 
     // Listen and send RPTL messages from new session connection
     this.messagingInterface = connection;
