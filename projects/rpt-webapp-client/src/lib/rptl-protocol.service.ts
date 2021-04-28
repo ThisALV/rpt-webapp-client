@@ -266,8 +266,8 @@ export class RptlProtocolService {
 
     // Initializes connected actors subject as client has just been registered with that confirmation message
     this.actors = new Subject<Actor[]>();
-    // Updates value with initially connected actors
-    this.actors.next(this.lastActorsValue);
+    // It would be useless to updated new value into subject now: as registered mode hasn't been toggled, no one is currently
+    // subscribed to it.
 
     // Finally, set registered mode for RPTL Protocol
     this.registeredMode = true;
@@ -348,16 +348,39 @@ export class RptlProtocolService {
 
   /**
    * @returns Updated list of registered actors or error with message property on unregistered mode
+   *
+   * @note Observable subject value might be updated even if no modification has been done to the actors list.
+   * @note Observable has no value at subscription, all `updateActorsSubscribers()` to next current actors list into every subscribable
+   * following actors list.
    */
   getActors(): Observable<Actor[]> {
     if (this.registeredMode) { // Must be registered to see other registered actors
-      return this.actors as Observable<Actor[]>; // this.actors defined inside registered mode
+      return this.actors as Observable<Actor[]>; // this.actors always defined inside registered mode
     } else {
       const error: Subject<Actor[]> = new Subject();
       error.error({ message: 'Unable to get actors inside unregistered mode' });
 
       return error;
     }
+  }
+
+  /**
+   * Next (= push) current actors list into every subscribable following actors list even if list hasn't changed since last nexted value.
+   *
+   * @throws BadSessionState if session isn't running
+   * @throws BadRptlMode if connected client isn't registered
+   */
+  updateActorsSubscribable(): void {
+    if (this.messagingInterface.isStopped) { // Checks for session to be running
+      throw new BadSessionState(true);
+    }
+
+    if (!this.registeredMode) { // Checks for client to be into registered RPTL mode
+      throw new BadRptlMode(true);
+    }
+
+    // If connected and registered, pushes current actors list
+    this.actors?.next(this.lastActorsValue);
   }
 
   /**

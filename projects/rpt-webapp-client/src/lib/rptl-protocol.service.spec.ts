@@ -160,6 +160,7 @@ describe('RptlProtocolService', () => {
       error: unexpected,
       complete: unexpected
     });
+    service.updateActorsSubscribable(); // Must pushes a value inside actors subscribable
     expect(actors).toHaveSize(0);
   });
 });
