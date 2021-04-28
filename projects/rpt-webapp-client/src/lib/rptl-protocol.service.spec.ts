@@ -125,6 +125,10 @@ describe('RptlProtocolService', () => {
     expect(noStatus).toBeTrue();
   });
 
+  it('should not send a checkout command if no session is running', () => {
+    expect(() => service.updateStatusFromServer()).toThrowError(BadSessionState); // Running session required
+  });
+
   it('should retrieve server status if session is running into unregistered mode', () => {
     const mockedWsConnection: MockedWebsocketSubject = new MockedWebsocketSubject();
     service.beginSession(mockedWsConnection);
@@ -145,6 +149,14 @@ describe('RptlProtocolService', () => {
     expect(status).toEqual(new Availability(4, 5));
   });
 
+  it('should send a checkout command if session is running into unregistered mode', () => {
+    const mockedWsConnection: MockedWebsocketSubject = new MockedWebsocketSubject();
+    service.beginSession(mockedWsConnection);
+
+    expect(() => service.updateStatusFromServer()).not.toThrow();
+    expect(mockedWsConnection.nextMessage()).toEqual('CHECKOUT'); // Expects RPTL command to have been sent to server
+  });
+
   it('should be able to register if session has begun and no actor is already connected', () => {
     const mockedWsConnection: MockedWebsocketSubject = new MockedWebsocketSubject();
     service.beginSession(mockedWsConnection);
@@ -162,5 +174,15 @@ describe('RptlProtocolService', () => {
     });
     service.updateActorsSubscribable(); // Must pushes a value inside actors subscribable
     expect(actors).toHaveSize(0);
+  });
+
+  it('should not send a checkout command if session is running into registered mode', () => {
+    const mockedWsConnection: MockedWebsocketSubject = new MockedWebsocketSubject();
+    service.beginSession(mockedWsConnection);
+
+    service.register(42, 'ThisALV'); // Enters registered RPTL mode
+    mockedWsConnection.fromServer('REGISTRATION'); // Emulates server registration confirmation
+
+    expect(() => service.updateStatusFromServer()).toThrowError(BadRptlMode); // Unregistered RPTL mode required
   });
 });
