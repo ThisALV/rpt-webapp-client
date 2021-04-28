@@ -241,27 +241,34 @@ export class RptlProtocolService {
   }
 
   private handleRegistrationCommand(parsedCommand: CommandParser): void {
-    // Arguments repeated for each actor already connected
-    const actorArgumentsScheme: ArgumentScheme[] = [
-      { name: 'uid', type: Number }, { name: 'name', type: String }
-    ];
-
     // Reset last value for actors list subject
     this.lastActorsValue = [];
 
     // Parses each connected actor, begging with all RPTL command arguments
     let currentParsedActor: CommandParser = parsedCommand;
     // While there is still arguments to parse, tries to parse next already connected actor
+    let currentArgumentsSuffix = 0;
     while (currentParsedActor.unparsed.length !== 0) {
+      // Actor arguments pair for current actor inside REGISTRATION command, with appropriate suffix
+      const currentUidArgument = `uid${currentArgumentsSuffix}`;
+      const currentNameArgument = `name${currentArgumentsSuffix}`;
+      const currentActorArgumentsScheme: ArgumentScheme[] = [
+        { name: currentUidArgument, type: Number }, { name: currentNameArgument, type: String }
+      ];
+
+      currentArgumentsSuffix++; // Next arguments pair must have a different name
+
       try {
-        // Takes 2 next arguments, then prepares to parse for next actor with reassignement
-        currentParsedActor = currentParsedActor.parseTo(actorArgumentsScheme);
+        // Takes 2 next arguments, then prepares to parse for next actor with reassignment
+        currentParsedActor = currentParsedActor.parseTo(currentActorArgumentsScheme);
       } catch (err) {
         throw new BadServerMessage(err.message);
       }
 
       // Pushes just parsed connected actor
-      this.lastActorsValue.push(new Actor(currentParsedActor.parsedData.uid, currentParsedActor.parsedData.name));
+      this.lastActorsValue.push(new Actor(
+        currentParsedActor.parsedData[currentUidArgument], currentParsedActor.parsedData[currentNameArgument]
+      ));
     }
 
     // Initializes connected actors subject as client has just been registered with that confirmation message
