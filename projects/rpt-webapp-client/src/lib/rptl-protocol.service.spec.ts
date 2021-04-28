@@ -162,10 +162,11 @@ describe('RptlProtocolService', () => {
     service.beginSession(mockedWsConnection);
 
     expect(() => service.register(42, 'ThisALV')).not.toThrow(); // Registration command should be sent successfully
-    mockedWsConnection.fromServer(' REGISTRATION  '); // Server RPTL response when no actor is already connected
+    expect(mockedWsConnection.nextMessage()).toEqual('LOGIN 42 ThisALV'); // Checks for handshake command to have been sent
+    mockedWsConnection.fromServer(' REGISTRATION  42  ThisALV '); // Server RPTL response when no actor is already connected
     expect(service.getSelf()).toEqual(new Actor(42, 'ThisALV')); // Expect client own actor to be accessible and saved
 
-    // Expect actors to be available but empty as no actor was already connected
+    // Expect actors to be available and to contain only our own registered actor ThisALV
     let actors: Actor[] | undefined;
     service.getActors().subscribe({
       next: (initialActors) => actors = initialActors,
@@ -173,7 +174,36 @@ describe('RptlProtocolService', () => {
       complete: unexpected
     });
     service.updateActorsSubscribable(); // Must pushes a value inside actors subscribable
-    expect(actors).toHaveSize(0);
+
+    // Checks for actors list
+    expect(actors).toHaveSize(1);
+    expect(actors).toContain(new Actor(42, 'ThisALV'));
+  });
+
+  it('should be able to register if session has begun and some actors are already connected', () => {
+    const mockedWsConnection: MockedWebsocketSubject = new MockedWebsocketSubject();
+    service.beginSession(mockedWsConnection);
+
+    // Registers client like into previous test
+    expect(() => service.register(42, 'ThisALV')).not.toThrow();
+    expect(mockedWsConnection.nextMessage()).toEqual('LOGIN 42 ThisALV');
+
+    mockedWsConnection.fromServer('   REGISTRATION 42  ThisALV   0 Redox '); // Checks from handshake
+    expect(service.getSelf()).toEqual(new Actor(42, 'ThisALV'));
+
+    // Expect actors to be available and to contain our 2 registered actors ThisALV and Redox
+    let actors: Actor[] | undefined;
+    service.getActors().subscribe({
+      next: (initalActors: Actor[]) => actors = initalActors,
+      error: unexpected,
+      complete: unexpected
+    });
+    service.updateActorsSubscribable(); // Must pushes a value inside actors subscribable
+
+    // Checks for actors list
+    expect(actors).toHaveSize(2);
+    expect(actors).toContain(new Actor(42, 'ThisALV'));
+    expect(actors).toContain(new Actor(0, 'Redox'));
   });
 
   it('should not send a checkout command if session is running into registered mode', () => {
