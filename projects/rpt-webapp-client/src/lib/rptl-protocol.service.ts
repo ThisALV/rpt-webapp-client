@@ -407,6 +407,25 @@ export class RptlProtocolService {
   }
 
   /**
+   * Sends an RPTL checkout command to server to status will be updated and new value nexted into every status subscribable.
+   *
+   * @throws BadSessionState if session isn't running
+   * @throws BadRptlMode if connected client is not into unregistered RPTL mode
+   */
+  updateStatusFromServer(): void {
+    if (this.messagingInterface.isStopped) { // Checks for session to be running
+      throw new BadSessionState(true);
+    }
+
+    if (this.registeredMode) { // Checks for client to not be registered
+      throw new BadRptlMode(false);
+    }
+
+    // Sends CHECKOUT command to get AVAILABILITY response from server
+    this.messagingInterface.next('CHECKOUT');
+  }
+
+  /**
    * @returns Data for actor owned by this client
    *
    * @throws BadRptlMode if client isn't registered yet
