@@ -339,7 +339,7 @@ export class RptlProtocolService {
   }
 
   /**
-   * Properly logout from server using RPTL logout command.
+   * Properly logout from server using RPTL logout command if registered, closing directly the messaging interface otherwise.
    *
    * Connection should be closed by server after this call.
    *
@@ -350,7 +350,11 @@ export class RptlProtocolService {
       throw new BadSessionState(true);
     }
 
-    this.sendMessage('LOGOUT');
+    if (this.registeredMode) {
+      this.sendMessage('LOGOUT');
+    } else {
+      this.clearSession(); // User requested end, no error provided
+    }
   }
 
   /**
