@@ -361,7 +361,6 @@ describe('RptlProtocolService', () => {
     beforeEach(() => service.beginSession(mockedWsConnection));
 
     it('should handle registered-only commands into registered mode', () => {
-      service.beginSession(mockedWsConnection);
       mockRegistration(); // Puts session into registered mode
 
       // AVAILABILITY command allowed into registered mode, client will disconnect from server because RPTL Protocol errors are fatal
@@ -370,7 +369,7 @@ describe('RptlProtocolService', () => {
     });
 
     it('should handle unregistered-only commands into unregistered mode', () => {
-      service.beginSession(mockedWsConnection); // Keeps session into unregistered mode
+      // Keeps session into unregistered
 
       // SERVICE command not allowed into unregistered mode, client will disconnect from server because RPTL Protocol errors are fatal
       mockedWsConnection.fromServer('SERVICE random command');
