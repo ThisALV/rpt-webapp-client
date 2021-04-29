@@ -471,7 +471,7 @@ describe('RptlProtocolService', () => {
             complete: unexpected
           });
 
-          mockedWsConnection.fromServer('LOGGED_OUT 0 Redox'); // Emulates a disconnection from Redox
+          mockedWsConnection.fromServer('LOGGED_OUT 0'); // Emulates a disconnection from Redox
 
           expect(actorsList).toBeDefined(); // Actors list should have been updated
           // Checks for actors list content
