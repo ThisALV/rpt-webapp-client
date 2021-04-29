@@ -318,11 +318,42 @@ describe('RptlProtocolService', () => {
   });
 
   describe('getSelf()', () => {
+    it('should throw if session is not running', () => {
+      expect(() => service.getSelf()).toThrowError(BadSessionState);
+    });
 
+    it('should throw if session is running into unregistered mode', () => {
+      service.beginSession(mockedWsConnection);
+
+      expect(() => service.getSelf()).toThrowError(BadRptlMode);
+    });
+
+    it('should retrieve client own actor if registered mode', () => {
+      service.beginSession(mockedWsConnection);
+      mockRegistration(); // Client own actor is [42] ThisALV
+
+      expect(service.getSelf()).toEqual(new Actor(42, 'ThisALV'));
+    });
   });
 
   describe('register()', () => {
+    it('should throw if session is not running', () => {
+      expect(() => service.register(42, 'ThisALV')).toThrowError(BadSessionState);
+    });
 
+    it('should throw if session is already running into registered mode', () => {
+      service.beginSession(mockedWsConnection);
+      mockRegistration();
+
+      expect(() => service.register(42, 'ThisALV')).toThrowError(BadRptlMode);
+    });
+
+    it('should send handshake command if session is running into unregistered mode', () => {
+      service.beginSession(mockedWsConnection);
+
+      expect(() => service.register(42, 'ThisALV')).not.toThrow(); // Registration should be done successfully
+      expect(mockedWsConnection.nextMessage()).toEqual('LOGIN 42 ThisALV'); // Checks for command sent by client
+    });
   });
 
   describe('Command handlers', () => {
