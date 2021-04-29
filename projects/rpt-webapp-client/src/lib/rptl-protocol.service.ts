@@ -290,6 +290,26 @@ export class RptlProtocolService {
   }
 
   /**
+   * @returns If current client connection is alive or not.
+   */
+  isSessionRunning(): boolean {
+    return !this.messagingInterface.isStopped;
+  }
+
+  /**
+   * @returns If current client is into RPTL registered mode or not (unregistered).
+   *
+   * @throws BadSessionState if current client isn't connected
+   */
+  isRegistered(): boolean {
+    if (!this.isSessionRunning()) { // Checks for client to be connected
+      throw new BadSessionState(true);
+    }
+
+    return this.registeredMode;
+  }
+
+  /**
    * Resets RPTL protocol state to begin new session on given connection.
    *
    * @param connection RPTL messages stream for this session
@@ -297,7 +317,7 @@ export class RptlProtocolService {
    * @throws BadSessionState if session is already running
    */
   beginSession(connection: Subject<string>): void {
-    if (!this.messagingInterface.isStopped) { // Checks if session isn't already running
+    if (this.isSessionRunning()) { // Checks if session isn't already running
       throw new BadSessionState(false);
     }
 
@@ -344,11 +364,7 @@ export class RptlProtocolService {
    * @throws BadSessionState If no session is currently running
    */
   endSession(): void {
-    if (this.messagingInterface.isStopped) { // Checks if a session is run using RPTL messages subject state
-      throw new BadSessionState(true);
-    }
-
-    if (this.registeredMode) {
+    if (this.isRegistered()) {
       this.sendMessage('LOGOUT');
     } else {
       this.clearSession(); // User requested end, no error provided
@@ -363,11 +379,16 @@ export class RptlProtocolService {
    * following actors list.
    */
   getActors(): Observable<Actor[]> {
-    if (this.registeredMode) { // Must be registered to see other registered actors
+    if (!this.messagingInterface.isStopped && this.registeredMode) { // Must be registered to see other registered actors
       return this.actors as Observable<Actor[]>; // this.actors always defined inside registered mode
     } else {
       const error: Subject<Actor[]> = new Subject();
-      error.error({ message: 'Unable to get actors inside unregistered mode' });
+
+      if (this.isSessionRunning()) {
+        error.error({ message: 'Unable to get actors inside unregistered mode' });
+      } else {
+        error.error({ message: 'Unable to get actors without a running session' });
+      }
 
       return error;
     }
@@ -380,11 +401,7 @@ export class RptlProtocolService {
    * @throws BadRptlMode if connected client isn't registered
    */
   updateActorsSubscribable(): void {
-    if (this.messagingInterface.isStopped) { // Checks for session to be running
-      throw new BadSessionState(true);
-    }
-
-    if (!this.registeredMode) { // Checks for client to be into registered RPTL mode
+    if (!this.isRegistered()) { // Checks for client to be connected into registered RPTL mode
       throw new BadRptlMode(true);
     }
 
@@ -403,7 +420,7 @@ export class RptlProtocolService {
       const error: Subject<Availability> = new Subject<Availability>();
 
       let errorMessage: string;
-      if (this.messagingInterface.isStopped) { // Error message depends on which precondition isn't true
+      if (!this.isSessionRunning()) { // Error message depends on which precondition isn't true
         errorMessage = 'Unable to check for status without any session';
       } else {
         errorMessage = 'Unable to check for status if already registered';
@@ -422,11 +439,7 @@ export class RptlProtocolService {
    * @throws BadRptlMode if connected client is not into unregistered RPTL mode
    */
   updateStatusFromServer(): void {
-    if (this.messagingInterface.isStopped) { // Checks for session to be running
-      throw new BadSessionState(true);
-    }
-
-    if (this.registeredMode) { // Checks for client to not be registered
+    if (this.isRegistered()) { // Checks for client to be connected but not registered yet
       throw new BadRptlMode(false);
     }
 
@@ -437,10 +450,11 @@ export class RptlProtocolService {
   /**
    * @returns Subject to send SER commands with instance next() and receive commands from server using observers next().
    *
+   * @throws BadSessionState if session isn't running
    * @throws BadRptlMode if client isn't connected or isn't registered yet
    */
   getSerProtocol(): Subject<string> {
-    if (!this.registeredMode) { // Checks for session to be running into registered RPTL mode
+    if (!this.isRegistered()) { // Checks for session to be running into registered RPTL mode
       throw new BadRptlMode(true);
     }
 
@@ -450,10 +464,11 @@ export class RptlProtocolService {
   /**
    * @returns Data for actor owned by this client
    *
+   * @throws BadSessionState if session isn't running
    * @throws BadRptlMode if client isn't registered yet
    */
   getSelf(): Actor {
-    if (!this.registeredMode) { // Checks for client to be registered
+    if (!this.isRegistered()) { // Checks for client to be connected and registered
       throw new BadRptlMode(true);
     }
 
@@ -470,11 +485,7 @@ export class RptlProtocolService {
    * @throws BadRptlMode if connected client is already registered
    */
   register(uid: number, name: string): void {
-    if (this.messagingInterface.isStopped) { // Checks for session to be running
-      throw new BadSessionState(true);
-    }
-
-    if (this.registeredMode) { // Checks for client to not be registered yet
+    if (this.isRegistered()) { // Checks for client to be connected but not registered yet
       throw new BadRptlMode(false);
     }
 
