@@ -308,10 +308,12 @@ describe('RptlProtocolService', () => {
       mockRegistration();
 
       service.getSerProtocol().subscribe({ // Should not be errored or completed
-        next: () => expect().nothing(),
+        next: unexpected,
         error: unexpected,
         complete: unexpected
       });
+
+      expect().nothing(); // No handler should have been called on SER Protocol subject, as it is still open and nothing was done
     });
   });
 
