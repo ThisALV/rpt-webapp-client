@@ -3,6 +3,7 @@ import { Observable, Subject } from 'rxjs';
 import { Actor } from './actor';
 import { Availability } from './availability';
 import { ArgumentScheme, CommandParser } from './command-parser';
+import { SerProtocolSubject } from './ser-protocol-subject';
 
 
 /**
@@ -68,11 +69,6 @@ type CommandHandlers = { [command: string]: Handler };
   providedIn: 'root'
 })
 export class RptlProtocolService {
-  /**
-   * Subject used to send and receive SER Protocol commands.
-   */
-  serCommands: Subject<string>;
-
   // Handlers to call for eah command invoked by server on registered mode
   private readonly registeredCommandHandlers: CommandHandlers;
   // Same for unregistered mode
@@ -88,6 +84,8 @@ export class RptlProtocolService {
   private lastActorsValue: Actor[];
   // Updatable data about server availability, if it is possible to connect or if server is full
   private availability?: Subject<Availability>;
+  // Subject used to send and receive SER Protocol commands
+  private serProtocol?: SerProtocolSubject;
   // Subject used to send and receive message with a (potentially mocked) server
   private messagingInterface: Subject<string>;
 
@@ -95,15 +93,13 @@ export class RptlProtocolService {
    * Constructs service not connected to any server as unregistered RPTL protocol mode.
    */
   constructor() {
-    this.serCommands = new Subject<string>();
     this.registeredMode = false;
-    this.messagingInterface = new Subject<string>(); // Sending/receiving message when not connected does
+    this.messagingInterface = new Subject<string>(); // Sending/receiving message when not connected doesn't do anything
 
     this.lastActorsValue = []; // Can be empty at initialization, doesn't matter because actors member isn't initialized yet
-    this.serCommands.complete(); // No running session, no SER Command to retrieve
     this.messagingInterface.complete(); // No running session, no RPTL message to handle
 
-    // Initalizes command handlers for each RPTL mode
+    // Initializes command handlers for each RPTL mode
 
     this.registeredCommandHandlers = {
       INTERRUPT: (parsedCommand: CommandParser) => this.handleInterruptCommand(parsedCommand),
@@ -128,13 +124,13 @@ export class RptlProtocolService {
     if (error) { // If error occurred
       const errorMessage: string = error as string;
 
-      this.serCommands.error(errorMessage);
       this.messagingInterface.error(errorMessage);
+      this.serProtocol?.error(errorMessage);
       this.actors?.error(errorMessage);
       this.availability?.error(errorMessage);
     } else { // If terminated properly
-      this.serCommands.complete();
       this.messagingInterface.complete();
+      this.serProtocol?.complete();
       this.actors?.complete();
       this.availability?.complete();
     }
@@ -184,7 +180,7 @@ export class RptlProtocolService {
 
   private handleServiceCommand(parsedCommand: CommandParser): void {
     // Provides RPTL command argument which is an RPTL command to SER Protocol subject
-    this.serCommands.next(parsedCommand.unparsed);
+    this.serProtocol?.handleCommand(parsedCommand.unparsed);
   }
 
   private handleLoggedInCommand(parsedCommand: CommandParser): void {
@@ -271,6 +267,8 @@ export class RptlProtocolService {
       ));
     }
 
+    // Initializes SER Protocol subject with current connection
+    this.serProtocol = new SerProtocolSubject(this.messagingInterface);
     // Initializes connected actors subject as client has just been registered with that confirmation message
     this.actors = new Subject<Actor[]>();
     // It would be useless to updated new value into subject now: as registered mode hasn't been toggled, no one is currently
@@ -434,6 +432,19 @@ export class RptlProtocolService {
 
     // Sends CHECKOUT command to get AVAILABILITY response from server
     this.messagingInterface.next('CHECKOUT');
+  }
+
+  /**
+   * @returns Subject to send SER commands with instance next() and receive commands from server using observers next().
+   *
+   * @throws BadRptlMode if client isn't connected or isn't registered yet
+   */
+  getSerProtocol(): Subject<string> {
+    if (!this.registeredMode) { // Checks for session to be running into registered RPTL mode
+      throw new BadRptlMode(true);
+    }
+
+    return this.serProtocol as Subject<string>; // serProtocol is always initialized into registered mode
   }
 
   /**
