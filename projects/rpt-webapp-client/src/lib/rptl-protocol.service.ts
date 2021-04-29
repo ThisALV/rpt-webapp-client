@@ -33,6 +33,19 @@ export class BadRptlMode extends Error {
 
 
 /**
+ * Thrown by `RptlProtocolService:beginSession()` if given connection is alreayd terminated.
+ */
+export class BadConnectionSubject extends Error {
+  /**
+   * @param reason Message explaining why given connection wasn't valid
+   */
+  constructor(reason: string) {
+    super(`Bad connection: ${reason}`);
+  }
+}
+
+
+/**
  * Thrown if a received RPTL message is ill-formed.
  */
 export class BadServerMessage extends Error {
@@ -315,10 +328,15 @@ export class RptlProtocolService {
    * @param connection RPTL messages stream for this session
    *
    * @throws BadSessionState if session is already running
+   * @throws BadConnectionSubject if given connection is already stopped
    */
   beginSession(connection: Subject<string>): void {
     if (this.isSessionRunning()) { // Checks if session isn't already running
       throw new BadSessionState(false);
+    }
+
+    if (connection.isStopped) { // Checks for connection to haven't been stopped, else session will never terminate
+      throw new BadConnectionSubject('Already completed or errored');
     }
 
     // Reset state
@@ -328,7 +346,6 @@ export class RptlProtocolService {
 
     // Listen and send RPTL messages from new session connection
     this.messagingInterface = connection;
-
     const context: RptlProtocolService = this;
     connection.subscribe({
       next(rptlMessage: string): void { // Handle every received message
