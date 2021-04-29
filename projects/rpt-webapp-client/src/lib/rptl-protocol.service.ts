@@ -207,8 +207,8 @@ export class RptlProtocolService {
       throw new BadServerMessage(err.message);
     }
 
-    // Actor who just logged on
-    const newActor: Actor = new Actor(parsedArguments.parsedData.uid, parsedArguments.parsedData.name);
+    // Actor who just logged on, with uid converted to primitive-type as it was new-constructed by CommandParser
+    const newActor: Actor = new Actor(Number(parsedArguments.parsedData.uid), parsedArguments.parsedData.name);
 
     // If just registered, it might be our own actor. In this case it must be ignored.
     if (newActor.uid !== this.selfActor?.uid) {
@@ -229,7 +229,8 @@ export class RptlProtocolService {
     }
 
     // Keep each actor which hasn't UID of the logged out one
-    this.lastActorsValue = this.lastActorsValue.filter((actor: Actor) => actor.uid !== parsedArguments.parsedData.uid);
+    // UID for logged out actor is converted into primitive-type because CommandParser new-constructs its arguments value
+    this.lastActorsValue = this.lastActorsValue.filter((actor: Actor) => actor.uid !== Number(parsedArguments.parsedData.uid));
     // Then update subject with new value
     this.actors?.next(this.lastActorsValue);
   }
@@ -274,9 +275,9 @@ export class RptlProtocolService {
         throw new BadServerMessage(err.message);
       }
 
-      // Pushes just parsed connected actor
+      // Pushes just parsed connected actor, new-constructed UID is converted into primitive type
       this.lastActorsValue.push(new Actor(
-        currentParsedActor.parsedData[currentUidArgument], currentParsedActor.parsedData[currentNameArgument]
+        Number(currentParsedActor.parsedData[currentUidArgument]), currentParsedActor.parsedData[currentNameArgument]
       ));
     }
 
