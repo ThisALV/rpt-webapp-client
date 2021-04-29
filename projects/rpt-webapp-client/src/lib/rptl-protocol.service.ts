@@ -379,7 +379,7 @@ export class RptlProtocolService {
    * following actors list.
    */
   getActors(): Observable<Actor[]> {
-    if (!this.messagingInterface.isStopped && this.registeredMode) { // Must be registered to see other registered actors
+    if (this.isSessionRunning() && this.isRegistered()) { // Must be registered to see other registered actors
       return this.actors as Observable<Actor[]>; // this.actors always defined inside registered mode
     } else {
       const error: Subject<Actor[]> = new Subject();
@@ -414,7 +414,7 @@ export class RptlProtocolService {
    */
   getStatus(): Observable<Availability> {
     // Must be unregistered but with running session to check for server status
-    if (!this.registeredMode && !this.messagingInterface.isStopped) {
+    if (this.isSessionRunning() && !this.isRegistered()) {
       return this.availability as Observable<Availability>;
     } else {
       const error: Subject<Availability> = new Subject<Availability>();
@@ -449,16 +449,24 @@ export class RptlProtocolService {
 
   /**
    * @returns Subject to send SER commands with instance next() and receive commands from server using observers next().
-   *
-   * @throws BadSessionState if session isn't running
-   * @throws BadRptlMode if client isn't connected or isn't registered yet
    */
   getSerProtocol(): Subject<string> {
-    if (!this.isRegistered()) { // Checks for session to be running into registered RPTL mode
-      throw new BadRptlMode(true);
-    }
+    if (this.isSessionRunning() && this.isRegistered()) {
+      return this.serProtocol as Subject<string>; // serProtocol is always initialized into registered mode
+    } else {
+      const error: Subject<string> = new Subject<string>();
 
-    return this.serProtocol as Subject<string>; // serProtocol is always initialized into registered mode
+      let errorMessage: string;
+      if (!this.isSessionRunning()) { // Error message depends on which precondition isn't true
+        errorMessage = 'Unable to retrieve SER Protocol subject without any running session';
+      } else {
+        errorMessage = 'Unable to retrieve SER Protocol subject into unregistered RPTL mode';
+      }
+
+      error.error({ message: errorMessage });
+
+      return error;
+    }
   }
 
   /**
