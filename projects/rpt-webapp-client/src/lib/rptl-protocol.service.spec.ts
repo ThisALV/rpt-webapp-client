@@ -1,10 +1,10 @@
-import { TestBed, waitForAsync } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { unexpected } from './testing-helpers';
-import { BadRptlMode, BadSessionState, RptlProtocolService } from './rptl-protocol.service';
-import { Subject } from 'rxjs';
-import { Availability } from './availability';
+import { BadConnectionSubject, BadRptlMode, BadSessionState, RptlProtocolService } from './rptl-protocol.service';
+import { Observable, Subject } from 'rxjs';
 import { Actor } from './actor';
 import { ObjectUnsubscribedError } from 'rxjs';
+import { Availability } from './availability';
 
 
 /**
@@ -69,150 +69,261 @@ class MockedWebsocketSubject extends Subject<string> {
 }
 
 
+/**
+ * Expects that only error() callback of subscriber for given observable will be called.
+ *
+ * @param observable Observable to check state for
+ * @param routine Routine that should put given observable into errored state
+ */
+function expectToBeErrored(observable: Observable<any>, routine?: () => void): void {
+  let hasError = false;
+  observable.subscribe({
+    next: unexpected,
+    error: () => hasError = true,
+    complete: unexpected
+  });
+
+  // An action might be necessary to put given observable into errored state
+  if (routine !== undefined) {
+    routine();
+  }
+
+  expect(hasError).toBeTrue(); // Only error callback should have been called
+}
+
+
 describe('RptlProtocolService', () => {
   let service: RptlProtocolService;
+  let mockedWsConnection: MockedWebsocketSubject;
+
+
+  /**
+   * Puts service session into registered with own actor [42] ThisALV and one already connected actor [0] Redox.
+   */
+  function mockRegistration(): void {
+    // Sends handshake to server
+    service.register(42, 'ThisALV');
+    // Mocks server handshake response with some actors already connected
+    mockedWsConnection.fromServer('REGISTRATION 42 ThisALV 0 Redox'); // Puts session into registered RPTL mode
+  }
+
 
   beforeEach(() => {
     TestBed.configureTestingModule({});
     service = TestBed.inject(RptlProtocolService);
+
+    mockedWsConnection = new MockedWebsocketSubject(); // Creates a new mocked connection for each unit test
   });
 
   it('should be created', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should be constructed as not connected to any server', waitForAsync(() => {
-    expect(service.serCommands.isStopped).toBeTrue(); // SER commands subject closed if not connected
-
-    // Expect actors observable to be closed as there isn't any session to be registered on
-    let noActors = false;
-    service.getActors().subscribe({
-      next: unexpected,
-      error: () => noActors = true,
-      complete: unexpected
-    });
-    expect(noActors).toBeTrue();
-
-    // Registration should be impossible as there isn't any running session
-    expect(() => service.register(0, '')).toThrowError(BadSessionState);
-  }));
-
-  it('should start a new session at beginSession() if current is not running', () => {
-    const mockedWsConnection: MockedWebsocketSubject = new MockedWebsocketSubject();
-    service.beginSession(mockedWsConnection);
-
-    // Expect actors observable to be closed as session isn't on registered RPTL mode
-    let noActors = false;
-    service.getActors().subscribe({
-      next: unexpected,
-      error: () => noActors = true,
-      complete: unexpected
-    });
-    expect(noActors).toBeTrue();
-
-    // No actor should be owned by this client as it hasn't been registered yet
-    expect(() => service.getSelf()).toThrowError(BadRptlMode);
+  it('should be constructed as not connected to any server', () => {
+    expect(service.isSessionRunning()).toBeFalse();
   });
 
-  it('should not retrieve server status if no session is running', () => {
-    // Expect status observable to be closed as session isn't running
-    let noStatus = false;
-    service.getStatus().subscribe({
-      next: unexpected,
-      error: () => noStatus = true,
-      complete: unexpected
-    });
-    expect(noStatus).toBeTrue();
-  });
-
-  it('should not send a checkout command if no session is running', () => {
-    expect(() => service.updateStatusFromServer()).toThrowError(BadSessionState); // Running session required
-  });
-
-  it('should retrieve server status if session is running into unregistered mode', () => {
-    const mockedWsConnection: MockedWebsocketSubject = new MockedWebsocketSubject();
-    service.beginSession(mockedWsConnection);
-
-    // Expect status to be retrieved from next value on observable as session is running
-    let status: Availability | undefined;
-    service.getStatus().subscribe({
-      next: (newStatus: Availability) => status = newStatus,
-      error: unexpected,
-      complete: unexpected
+  describe('beginSession()', () => {
+    it('should throw if new connection is completed', () => {
+      mockedWsConnection.complete();
+      expect(() => service.beginSession(mockedWsConnection)).toThrowError(BadConnectionSubject);
+      expect(service.isSessionRunning()).toBeFalse();
     });
 
-    mockedWsConnection.fromServer('AVAILABILITY 2 5'); // Server sends an update about its current status
-    expect(status).toEqual(new Availability(2, 5)); // Observable should have received value and assigned it to status
-
-    // Same steps with a new status again
-    mockedWsConnection.fromServer('AVAILABILITY 4 5');
-    expect(status).toEqual(new Availability(4, 5));
-  });
-
-  it('should send a checkout command if session is running into unregistered mode', () => {
-    const mockedWsConnection: MockedWebsocketSubject = new MockedWebsocketSubject();
-    service.beginSession(mockedWsConnection);
-
-    expect(() => service.updateStatusFromServer()).not.toThrow();
-    expect(mockedWsConnection.nextMessage()).toEqual('CHECKOUT'); // Expects RPTL command to have been sent to server
-  });
-
-  it('should be able to register if session has begun and no actor is already connected', () => {
-    const mockedWsConnection: MockedWebsocketSubject = new MockedWebsocketSubject();
-    service.beginSession(mockedWsConnection);
-
-    expect(() => service.register(42, 'ThisALV')).not.toThrow(); // Registration command should be sent successfully
-    expect(mockedWsConnection.nextMessage()).toEqual('LOGIN 42 ThisALV'); // Checks for handshake command to have been sent
-    mockedWsConnection.fromServer(' REGISTRATION  42  ThisALV '); // Server RPTL response when no actor is already connected
-    expect(service.getSelf()).toEqual(new Actor(42, 'ThisALV')); // Expect client own actor to be accessible and saved
-
-    // Expect actors to be available and to contain only our own registered actor ThisALV
-    let actors: Actor[] | undefined;
-    service.getActors().subscribe({
-      next: (initialActors) => actors = initialActors,
-      error: unexpected,
-      complete: unexpected
+    it('should throw if new connection is errored', () => {
+      mockedWsConnection.error({ message: 'A random error' });
+      expect(() => service.beginSession(mockedWsConnection)).toThrowError(BadConnectionSubject);
+      expect(service.isSessionRunning()).toBeFalse();
     });
-    service.updateActorsSubscribable(); // Must pushes a value inside actors subscribable
 
-    // Checks for actors list
-    expect(actors).toHaveSize(1);
-    expect(actors).toContain(new Actor(42, 'ThisALV'));
-  });
-
-  it('should be able to register if session has begun and some actors are already connected', () => {
-    const mockedWsConnection: MockedWebsocketSubject = new MockedWebsocketSubject();
-    service.beginSession(mockedWsConnection);
-
-    // Registers client like into previous test
-    expect(() => service.register(42, 'ThisALV')).not.toThrow();
-    expect(mockedWsConnection.nextMessage()).toEqual('LOGIN 42 ThisALV');
-
-    mockedWsConnection.fromServer('   REGISTRATION 42  ThisALV   0 Redox '); // Checks from handshake
-    expect(service.getSelf()).toEqual(new Actor(42, 'ThisALV'));
-
-    // Expect actors to be available and to contain our 2 registered actors ThisALV and Redox
-    let actors: Actor[] | undefined;
-    service.getActors().subscribe({
-      next: (initalActors: Actor[]) => actors = initalActors,
-      error: unexpected,
-      complete: unexpected
+    it('should run session if it is not already running', () => {
+      expect(() => service.beginSession(mockedWsConnection)).not.toThrow();
+      expect(service.isSessionRunning()).toBeTrue();
     });
-    service.updateActorsSubscribable(); // Must pushes a value inside actors subscribable
 
-    // Checks for actors list
-    expect(actors).toHaveSize(2);
-    expect(actors).toContain(new Actor(42, 'ThisALV'));
-    expect(actors).toContain(new Actor(0, 'Redox'));
+    it('should throw if session is already running', () => {
+      service.beginSession(mockedWsConnection); // Puts session into running state
+      expect(() => service.beginSession(mockedWsConnection)).toThrowError(BadSessionState); // Already running
+      expect(service.isSessionRunning()).toBeTrue(); // Should not have stopped current session
+    });
+
+    it('should stop session when connection is completed', () => {
+      service.beginSession(mockedWsConnection);
+      expect(service.isSessionRunning()).toBeTrue();
+
+      mockedWsConnection.complete();
+      expect(service.isSessionRunning()).toBeFalse();
+    });
+
+    it('should stop session when connection is errored', () => {
+      service.beginSession(mockedWsConnection);
+      expect(service.isSessionRunning()).toBeTrue();
+
+      mockedWsConnection.error({ message: 'A random error' });
+      expect(service.isSessionRunning()).toBeFalse();
+    });
   });
 
-  it('should not send a checkout command if session is running into registered mode', () => {
-    const mockedWsConnection: MockedWebsocketSubject = new MockedWebsocketSubject();
-    service.beginSession(mockedWsConnection);
+  describe('endSession()', () => {
+    it('should throw if session is not running', () => {
+      expect(() => service.endSession()).toThrowError(BadSessionState);
+    });
 
-    service.register(42, 'ThisALV'); // Enters registered RPTL mode
-    mockedWsConnection.fromServer('REGISTRATION'); // Emulates server registration confirmation
+    it('should send logout command into registered mode', () => {
+      service.beginSession(mockedWsConnection);
+      mockRegistration();
 
-    expect(() => service.updateStatusFromServer()).toThrowError(BadRptlMode); // Unregistered RPTL mode required
+      expect(() => service.endSession()).not.toThrow();
+      expect(service.isSessionRunning()).toBeTrue(); // Session should still be running, waiting for server to close connection
+
+      mockedWsConnection.nextMessage(); // Registration has sent one message, ignores it to test logout command message
+      expect(mockedWsConnection.nextMessage()).toEqual('LOGOUT'); // Checks for command to have been sent
+    });
+
+    it('should stop session into unregistered mode', () => {
+      service.beginSession(mockedWsConnection);
+
+      expect(() => service.endSession()).not.toThrow();
+      expect(service.isSessionRunning()).toBeFalse(); // Unregistered, connection should be closed immediately
+    });
+  });
+
+  describe('getActors()', () => {
+    it('should return errored observable if session is not running', () => {
+      expectToBeErrored(service.getActors());
+    });
+
+    it('should return errored observable if session is into unregistered mode', () => {
+      service.beginSession(mockedWsConnection); // Puts session into running state as unregistered
+      expectToBeErrored(service.getActors());
+    });
+
+    it('should retrieve actors observable if session is into registered mode', () => {
+      service.beginSession(mockedWsConnection);
+
+      // Sends handshake to server
+      service.register(42, 'ThisALV');
+      // Mocks server handshake response with some actors already connected
+      mockedWsConnection.fromServer('REGISTRATION 42 ThisALV 0 Redox');
+
+      let actors: Actor[] | undefined;
+      service.getActors().subscribe({ // Only next callback should be called to push a new actors list
+        next: (newActors: Actor[]) => actors = newActors,
+        error: unexpected,
+        complete: unexpected
+      });
+
+      // Required to get current actors list as returned observable is new
+      // Session running into registered, should work, serves as a unit test for updateActorsSubscribable()
+      service.updateActorsSubscribable();
+
+      expect(actors).toBeDefined(); // next() should have been called
+      // Checks for actors list content to match RPTL state, no matter their order inside list
+      expect(actors).toHaveSize(2);
+      expect(actors).toContain(new Actor(42, 'ThisALV'));
+      expect(actors).toContain(new Actor(0, 'Redox'));
+    });
+  });
+
+  describe('updateActorsSubscribable()', () => {
+    it('should throw if session is not running', () => {
+      expect(() => service.updateActorsSubscribable()).toThrowError(BadSessionState);
+    });
+
+    it('should throw if session is running into unregistered mode', () => {
+      service.beginSession(mockedWsConnection);
+      expect(() => service.updateActorsSubscribable()).toThrowError(BadRptlMode);
+    });
+
+    // Correct method call is tested through getActors() unit testing
+  });
+
+  describe('getStatus()', () => {
+    it('should return errored observable if session is not running', () => {
+      expectToBeErrored(service.getStatus());
+    });
+
+    it('should return errored observable if session is running into registered mode', () => {
+      service.beginSession(mockedWsConnection); // Puts session into running state as unregistered
+
+      // Sends handshake to server
+      service.register(42, 'ThisALV');
+      // Mocks server handshake response with some actors already connected
+      mockedWsConnection.fromServer('REGISTRATION 42 ThisALV 0 Redox'); // Puts session into registered RPTL mode
+
+      expectToBeErrored(service.getStatus());
+    });
+
+    it('should retrieve server status observable if session is running into unregistered mode', () => {
+      service.beginSession(mockedWsConnection); // Puts session into running state as unregistered
+
+      let serverStatus: Availability | undefined;
+      service.getStatus().subscribe({ // Only next() should be called to push new server status
+        next: (newStatus: Availability) => serverStatus = newStatus,
+        error: unexpected,
+        complete: unexpected
+      });
+
+      // Required to update server status, will serves as a unit test for AVAILABILITY command handler
+      mockedWsConnection.fromServer('AVAILABILITY 2 5');
+
+      expect(serverStatus).toBeDefined(); // next() should have assigned an updated server status
+      expect(serverStatus).toEqual(new Availability(2, 5)); // Checks for status content
+    });
+  });
+
+  describe('updateStatusFromServer()', () => {
+    it('should throw if session is not running', () => {
+      expect(() => service.updateStatusFromServer()).toThrowError(BadSessionState);
+    });
+
+    it('should throw if session is running into registered mode', () => {
+      service.beginSession(mockedWsConnection);
+      mockRegistration();
+
+      expect(() => service.updateStatusFromServer()).toThrowError(BadRptlMode);
+    });
+
+    it('should send checkout command is session is running into unregistered mode', () => {
+      service.beginSession(mockedWsConnection);
+
+      expect(() => service.updateStatusFromServer()).not.toThrow();
+      expect(mockedWsConnection.nextMessage()).toEqual('CHECKOUT'); // This method should just send the checkout command to server
+    });
+  });
+
+  describe('getSerProtocol()', () => {
+    it('should return errored observalb if session is not running', () => {
+      expectToBeErrored(service.getSerProtocol());
+    });
+
+    it('should return errored observable if session is into unregistered mode', () => {
+      service.beginSession(mockedWsConnection); // Puts session into running state as unregistered
+      expectToBeErrored(service.getSerProtocol());
+    });
+
+    it('should retrieve SER Protocol subject if session is running into registered mode', () => {
+      // Puts session into running state as registered
+      service.beginSession(mockedWsConnection);
+      mockRegistration();
+
+      service.getSerProtocol().subscribe({ // Should not be errored or completed
+        next: () => expect().nothing(),
+        error: unexpected,
+        complete: unexpected
+      });
+    });
+  });
+
+  describe('getSelf()', () => {
+
+  });
+
+  describe('register()', () => {
+
+  });
+
+  describe('Command handlers', () => {
+
   });
 });
