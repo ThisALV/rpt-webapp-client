@@ -357,6 +357,9 @@ describe('RptlProtocolService', () => {
   });
 
   describe('Command handlers', () => {
+    // RPTL protocol messages sending/receiving requires a session to be running with an active connection
+    beforeEach(() => service.beginSession(mockedWsConnection));
+
     it('should handle registered-only commands into registered mode', () => {
       service.beginSession(mockedWsConnection);
       mockRegistration(); // Puts session into registered mode
@@ -372,6 +375,110 @@ describe('RptlProtocolService', () => {
       // SERVICE command not allowed into unregistered mode, client will disconnect from server because RPTL Protocol errors are fatal
       mockedWsConnection.fromServer('SERVICE random command');
       expect(service.isSessionRunning()).toBeFalse();
+    });
+
+    describe('Registered mode', () => {
+      // Registered-only commands require client to be registered
+      beforeEach(() => mockRegistration());
+
+      describe('INTERRUPT', () => {
+        it('should clear session with error if message is provided', () => {
+          mockedWsConnection.fromServer('INTERRUPT   An error occurred'); // Emulates interruption from server with an error message
+
+          let errorMessage: string | undefined;
+          mockedWsConnection.subscribe({ // Only error() call is expected, as connection should be errored
+            next: unexpected,
+            error: (err: any) => errorMessage = err.message,
+            complete: unexpected
+          });
+
+          expect(service.isSessionRunning()).toBeFalse(); // Session state should have been updated
+          expect(errorMessage).toBeDefined(); // error() callback should have been called
+          expect(errorMessage).toEqual('An error occurred');
+        });
+
+        it('should clear session normally if message is not provided', () => {
+          mockedWsConnection.fromServer('INTERRUPT'); // Emulates interruption from server without any error message
+
+          let connectionClosed = false;
+          mockedWsConnection.subscribe({ // Only complete() call is expected, as connection should be completed
+            next: unexpected,
+            error: unexpected,
+            complete: () => connectionClosed = true
+          });
+
+          expect(service.isSessionRunning()).toBeFalse(); // Session state should have been updated
+          expect(connectionClosed).toBeTrue();
+        });
+      });
+
+      describe('SERVICE', () => {
+        it('should pass given command to SER Protocol subject', () => {
+          let serviceCommand: string | undefined;
+          service.getSerProtocol().subscribe({ // Protocol should not be closed, just receive a SER command
+            next: (receivedCommand: string) => serviceCommand = receivedCommand,
+            error: unexpected,
+            complete: unexpected
+          });
+
+          mockedWsConnection.fromServer('SERVICE any command! !'); // Emulates a random SER command from server
+
+          expect(serviceCommand).toBeDefined(); // A value should have been passed to SER Protocol subject
+          expect(serviceCommand).toEqual('any command! !');
+        });
+      });
+
+      describe('LOGGED_IN', () => {
+        it('should update list with new actor if it is different from self', () => {
+          let actorsList: Actor[] | undefined;
+          service.getActors().subscribe({ // Session should not stop, next() call expected
+            next: (newActorsList: Actor[]) => actorsList = newActorsList,
+            error: unexpected,
+            complete: unexpected
+          });
+
+          mockedWsConnection.fromServer('LOGGED_IN  8   Lait2Vache'); // Emulates a new remote actor [8] Lait2Vache
+
+          expect(actorsList).toBeDefined(); // Actors list should have been updated
+          // Checks for actors list content
+          expect(actorsList).toHaveSize(3); // ThisALV and Redox were connected before
+          expect(actorsList).toContain(new Actor(42, 'ThisALV'));
+          expect(actorsList).toContain(new Actor(0, 'Redox'));
+          expect(actorsList).toContain(new Actor(8, 'Lait2Vache'));
+        });
+
+        it('should not update list if new actor is same than self', () => {
+          service.getActors().subscribe({ // No update should occur
+            next: unexpected,
+            error: unexpected,
+            complete: unexpected
+          });
+
+          // Emulates message sent by server right after REGISTRATION command from it
+          // This message is broadcast to every actor, so client actor is notified about its own registration, then it should ignore it
+          mockedWsConnection.fromServer('  LOGGED_IN   42 ThisALV');
+
+          expect().nothing(); // Command should be ignored, nothing should happen
+        });
+      });
+
+      describe('LOGGED_OUT', () => {
+        it('should update list without actor having received uid', () => {
+          let actorsList: Actor[] | undefined;
+          service.getActors().subscribe({ // Session should not stop, next() call expected
+            next: (newActorsList: Actor[]) => actorsList = newActorsList,
+            error: unexpected,
+            complete: unexpected
+          });
+
+          mockedWsConnection.fromServer('LOGGED_OUT 0 Redox'); // Emulates a disconnection from Redox
+
+          expect(actorsList).toBeDefined(); // Actors list should have been updated
+          // Checks for actors list content
+          expect(actorsList).toHaveSize(1); // ThisALV and Redox were connected before, Redox left
+          expect(actorsList).toContain(new Actor(42, 'ThisALV'));
+        });
+      });
     });
   });
 });
