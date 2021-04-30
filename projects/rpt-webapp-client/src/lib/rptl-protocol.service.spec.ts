@@ -535,5 +535,55 @@ describe('RptlProtocolService', () => {
         });
       });
     });
+
+    describe('Unregistered mode', () => {
+      // Keeps session into unregistered RPTL mode
+
+      describe('AVAILABILITY', () => {
+        it('should push new server status into observable', () => {
+          let serverStatus: Availability | undefined;
+          service.getStatus().subscribe({ // Expect for a new status to be pushed, listen before status update actually happens
+            next: (newStatus: Availability) => serverStatus = newStatus,
+            error: unexpected,
+            complete: unexpected
+          });
+
+          mockedWsConnection.fromServer('AVAILABILITY 4 5'); // Updates server status
+
+          expect(serverStatus).toEqual(new Availability(4, 5)); // Checks for correct status to have been assigned
+        });
+      });
+
+      describe('REGISTRATION', () => {
+        it('should set registered RPTL mode, add all received actors to list and complete status observable', () => {
+          let statusCompleted = false;
+          service.getStatus().subscribe({ // Expect observable to be completed() as RPTL mode will be set to registered
+            next: unexpected,
+            error: unexpected,
+            complete: () => statusCompleted = true
+          });
+
+          mockedWsConnection.fromServer('  REGISTRATION  42 ThisALV   0  Redox 8   Lait2Vache  ');
+
+          let actorsList: Actor[] | undefined;
+          service.getActors().subscribe({ // Expect actors list to contain all actors provided inside command arguments
+            next: (updatedList: Actor[]) => actorsList = updatedList,
+            error: unexpected,
+            complete: unexpected
+          });
+
+          service.updateActorsSubscribable(); // Actors list must have a value
+
+          expect(service.isRegistered()).toBeTrue(); // Checks for current RPTL mode
+          expect(statusCompleted).toBeTrue(); // Checks for unregistered-only observables to have completed
+          expect(actorsList).toBeDefined(); // Value must have been pushed
+          // Checks for list content
+          expect(actorsList).toHaveSize(3);
+          expect(actorsList).toContain(new Actor(42, 'ThisALV'));
+          expect(actorsList).toContain(new Actor(0, 'Redox'));
+          expect(actorsList).toContain(new Actor(8, 'Lait2Vache'));
+        });
+      });
+    });
   });
 });
