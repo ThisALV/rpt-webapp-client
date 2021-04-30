@@ -215,7 +215,7 @@ export class RptlProtocolService {
     // If just registered, it might be our own actor. In this case it must be ignored.
     if (newActor.uid !== this.selfActor?.uid) {
       // Pushes parsed actor data to last actors value
-      this.lastActorsValue.push();
+      this.lastActorsValue.push(newActor);
       // Then update subject with that value
       this.actors?.next(this.lastActorsValue);
     }
