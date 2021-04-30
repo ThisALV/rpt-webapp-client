@@ -132,7 +132,7 @@ export class RptlProtocolService {
   }
 
   /**
-   * Complete/error every subject depending on optional error argument
+   * When connection is closed, completes/errors every subject depending on optional error argument
    *
    * @param error Message for session end error cause, if any
    * @private
@@ -140,14 +140,11 @@ export class RptlProtocolService {
   private clearSession(error?: string): void {
     if (error) { // If error occurred
       const errorMessage = { message: error as string };
-      const websocketClosureReason = { code: WS_INTERNAL_ERROR, reason: errorMessage.message };
 
-      this.messagingInterface.error(websocketClosureReason);
       this.serProtocol?.error(errorMessage);
       this.actors?.error(errorMessage);
       this.availability?.error(errorMessage);
     } else { // If terminated properly
-      this.messagingInterface.complete();
       this.serProtocol?.complete();
       this.actors?.complete();
       this.availability?.complete();
@@ -359,9 +356,9 @@ export class RptlProtocolService {
 
         try { // Tries to handle received RPTL message
           context.handleMessage(rptlMessage);
-        } catch (err) { // Error may occurs during message handling, in case of a protocol error, stop current session
+        } catch (err) { // Error may occur during message handling, in case of a protocol error, stop current session by closing connection
           console.error(`Message handling failed: ${err}`);
-          context.clearSession(err.toString());
+          context.messagingInterface.error({ code: WS_INTERNAL_ERROR, reason: err.message }); // Notifies server about client-side error
         }
       },
 
