@@ -194,6 +194,9 @@ describe('RptlProtocolService', () => {
 
       expect(() => service.endSession()).not.toThrow();
       expect(service.isSessionRunning()).toBeFalse(); // Unregistered, connection should be closed immediately
+      // Checks for close frame sent by client, as client should have initiated disconnection because it wasn't registered
+      expect(mockedWsConnection.closureReason).toBeDefined();
+      expect(mockedWsConnection.closureReason).toEqual({ code: 1000 });
     });
   });
 
@@ -372,7 +375,11 @@ describe('RptlProtocolService', () => {
 
       // AVAILABILITY command allowed into registered mode, client will disconnect from server because RPTL Protocol errors are fatal
       mockedWsConnection.fromServer('AVAILABILITY random arguments');
+
       expect(service.isSessionRunning()).toBeFalse();
+      // Checks for close frame sent by client, as exception should have been caught by next() callback
+      expect(mockedWsConnection.closureReason).toBeDefined();
+      expect(mockedWsConnection.closureReason).toEqual({ code: 1011, reason: 'Unavailable command: AVAILABILITY' });
     });
 
     it('should handle unregistered-only commands into unregistered mode', () => {
@@ -380,7 +387,11 @@ describe('RptlProtocolService', () => {
 
       // SERVICE command not allowed into unregistered mode, client will disconnect from server because RPTL Protocol errors are fatal
       mockedWsConnection.fromServer('SERVICE random command');
+
       expect(service.isSessionRunning()).toBeFalse();
+      // Checks for close frame sent by client, as exception should have been caught by next() callback
+      expect(mockedWsConnection.closureReason).toBeDefined();
+      expect(mockedWsConnection.closureReason).toEqual({ code: 1011, reason: 'Unavailable command: SERVICE' });
     });
 
     describe('Registered mode', () => {
