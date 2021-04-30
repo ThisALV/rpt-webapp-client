@@ -11,8 +11,15 @@ import { Availability } from './availability';
  * Mocking for `WebSocketSubject` form rxjs, consisting in a Subject which next() method does not call observers next() member, and two
  * new methods `fromServer()` and `nextMessage()` which respectively call observers next() with a message from server and poll the next
  * message sent by the client.
+ *
+ * error() and complete() emulates a connection close frame, so complete() observers method is called no matter if error occurred or not.
  */
 class MockedWebsocketSubject extends Subject<string> {
+  /**
+   * Reason for connection to have been closed, if it has been closed by client (not by server)
+   */
+  closureReason?: { code: number, reason?: string };
+
   // Queue for messages sent by client
   private messagesQueue: string[];
 
@@ -41,6 +48,31 @@ class MockedWebsocketSubject extends Subject<string> {
     if (!this.isStopped) { // Checks for subject to not have been completed/errored
       this.messagesQueue.unshift(value); // Push back message into FIFO queue
     }
+  }
+
+  /**
+   * Closes connection mock with given reason. It will complete this subject normally and saves the error code into `closureReason` field.
+   *
+   * @param err Error code, with required number field `code` and optional string field `reason`
+   */
+  error(err: any): void {
+    this.closureReason = err; // Saves error reason to check for it later
+    super.complete();
+  }
+
+  /**
+   * Closes connection mock normally. It will complete this subject normally and saves the no error code into `closureReason` field.
+   */
+  complete(): void {
+    this.closureReason = { code: 1000 }; // No error occurred
+    super.complete();
+  }
+
+  /**
+   * Emulates a WebSocket close frame (error or not) from server by completing this subject normally and leaving `closureReason` undefined.
+   */
+  closeFromServer(): void {
+    super.complete();
   }
 
   /**
@@ -380,34 +412,58 @@ describe('RptlProtocolService', () => {
       // Registered-only commands require client to be registered
       beforeEach(() => mockRegistration());
 
-      describe('INTERRUPT', () => {
+      describe('INTERRUPT with Websocket close frame from server', () => {
+        let serProtocol: Subject<string>;
+
+        // SER subject is required to check for session to have been completed or errored
+        beforeEach(() => serProtocol = service.getSerProtocol());
+
         it('should clear session with error if message is provided', () => {
           mockedWsConnection.fromServer('INTERRUPT   An error occurred'); // Emulates interruption from server with an error message
-
-          let errorMessage: string | undefined;
-          mockedWsConnection.subscribe({ // Only error() call is expected, as connection should be errored
-            next: unexpected,
-            error: (err: any) => errorMessage = err.message,
-            complete: unexpected
-          });
-
-          expect(service.isSessionRunning()).toBeFalse(); // Session state should have been updated
-          expect(errorMessage).toBeDefined(); // error() callback should have been called
-          expect(errorMessage).toEqual('An error occurred');
-        });
-
-        it('should clear session normally if message is not provided', () => {
-          mockedWsConnection.fromServer('INTERRUPT'); // Emulates interruption from server without any error message
+          mockedWsConnection.closeFromServer(); // Emulates WS close frame from server, no matter the reason
 
           let connectionClosed = false;
-          mockedWsConnection.subscribe({ // Only complete() call is expected, as connection should be completed
+          mockedWsConnection.subscribe({ // complete() call is expected as connection has been closed by server
             next: unexpected,
             error: unexpected,
             complete: () => connectionClosed = true
           });
 
+          let sessionError: { message: string } | undefined;
+          serProtocol.subscribe({ // Only expects session to be errored with INTERRUPT option argument
+            next: unexpected,
+            error: (err: any) => sessionError = err,
+            complete: unexpected
+          });
+
           expect(service.isSessionRunning()).toBeFalse(); // Session state should have been updated
           expect(connectionClosed).toBeTrue();
+          expect(sessionError).toEqual({ message: 'An error occurred' }); // Closed because of an internal error
+          expect(mockedWsConnection.closureReason).toBeUndefined(); // Closed by server, no client-side close frame expected
+        });
+
+        it('should clear session normally if message is not provided', () => {
+          mockedWsConnection.fromServer('INTERRUPT'); // Emulates interruption from server without any error message
+          mockedWsConnection.closeFromServer(); // Emulates WS close frame from server, no matter the reason
+
+          let connectionClosed = false;
+          mockedWsConnection.subscribe({ // complete() call is expected as connection has been closed by server
+            next: unexpected,
+            error: unexpected,
+            complete: () => connectionClosed = true
+          });
+
+          let sessionCompleted = false;
+          serProtocol.subscribe({ // Only expects session to be completed
+            next: unexpected,
+            error: unexpected,
+            complete: () => sessionCompleted = true
+          });
+
+          expect(service.isSessionRunning()).toBeFalse(); // Session state should have been updated
+          expect(connectionClosed).toBeTrue();
+          expect(sessionCompleted).toBeTrue(); // Closed because of a regular client disconnection
+          expect(mockedWsConnection.closureReason).toBeUndefined(); // Closed by server, no client-side close frame expected
         });
       });
 
