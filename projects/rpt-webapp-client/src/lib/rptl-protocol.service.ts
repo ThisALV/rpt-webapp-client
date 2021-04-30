@@ -362,11 +362,9 @@ export class RptlProtocolService {
         }
       },
 
-      error(err: { code: number, reason?: string }): void { // Any connection error is fatal and must stop current session
-        const errMessage = `${err.code}: ${err.reason}`;
-
-        console.error(`Session error: ${errMessage}`);
-        context.clearSession(errMessage);
+      error(err: any): void { // Any connection error is fatal and must stop current session
+        console.error(`Session error: ${err.message}`);
+        context.clearSession(err.message);
       },
 
       complete(): void { // Stop current session if connection was closed
