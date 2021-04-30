@@ -385,6 +385,7 @@ export class RptlProtocolService {
     if (this.isRegistered()) {
       this.sendMessage('LOGOUT');
     } else {
+      this.messagingInterface.complete(); // Unregistered, directly send WS close frame
       this.clearSession(); // User requested end, no error provided
     }
   }
