@@ -64,6 +64,10 @@ type Handler = (parsedCommand: CommandParser) => void;
 type CommandHandlers = { [command: string]: Handler };
 
 
+// Websocket reason code for RPTL protocol related errors
+const WS_INTERNAL_ERROR = 1011;
+
+
 /**
  * Implements RPTL protocol through its messaging interface which is a strings subject to send and receive RPTL messages.
  *
@@ -135,9 +139,10 @@ export class RptlProtocolService {
    */
   private clearSession(error?: string): void {
     if (error) { // If error occurred
-      const errorMessage: string = error as string;
+      const errorMessage = { message: error as string };
+      const websocketClosureReason = { code: WS_INTERNAL_ERROR, reason: errorMessage.message };
 
-      this.messagingInterface.error(errorMessage);
+      this.messagingInterface.error(websocketClosureReason);
       this.serProtocol?.error(errorMessage);
       this.actors?.error(errorMessage);
       this.availability?.error(errorMessage);
