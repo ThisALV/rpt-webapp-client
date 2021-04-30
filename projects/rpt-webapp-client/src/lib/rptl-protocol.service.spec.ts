@@ -124,6 +124,21 @@ function expectToBeErrored(observable: Observable<any>, routine?: () => void): v
 }
 
 
+/**
+ * Checks for given list to contain every expected element only once, without any other elements.
+ *
+ * @param list Value to expect for
+ * @param expected List of values to found only once inside given list
+ */
+function expectToContainExactly(list: any[], ...expected: any[]): void {
+  expect(list).toHaveSize(expected.length); // Checks to not have any additional element
+
+  for (const elem of expected) { // Checks for each expected element
+    expect(list).toContain(elem);
+  }
+}
+
+
 describe('RptlProtocolService', () => {
   let service: RptlProtocolService;
   let mockedWsConnection: MockedWebsocketSubject;
@@ -251,9 +266,7 @@ describe('RptlProtocolService', () => {
 
       expect(actors).toBeDefined(); // next() should have been called
       // Checks for actors list content to match RPTL state, no matter their order inside list
-      expect(actors).toHaveSize(2);
-      expect(actors).toContain(new Actor(42, 'ThisALV'));
-      expect(actors).toContain(new Actor(0, 'Redox'));
+      expectToContainExactly(actors as Actor[], new Actor(42, 'ThisALV'), new Actor(0, 'Redox'));
     });
   });
 
@@ -495,11 +508,10 @@ describe('RptlProtocolService', () => {
           mockedWsConnection.fromServer('LOGGED_IN  8   Lait2Vache'); // Emulates a new remote actor [8] Lait2Vache
 
           expect(actorsList).toBeDefined(); // Actors list should have been updated
-          // Checks for actors list content
-          expect(actorsList).toHaveSize(3); // ThisALV and Redox were connected before
-          expect(actorsList).toContain(new Actor(42, 'ThisALV'));
-          expect(actorsList).toContain(new Actor(0, 'Redox'));
-          expect(actorsList).toContain(new Actor(8, 'Lait2Vache'));
+          // Checks for list content
+          expectToContainExactly(actorsList as Actor[],
+            new Actor(42, 'ThisALV'), new Actor(0, 'Redox'), new Actor(8, 'Lait2Vache')
+          );
         });
 
         it('should not update list if new actor is same than self', () => {
@@ -529,9 +541,8 @@ describe('RptlProtocolService', () => {
           mockedWsConnection.fromServer('LOGGED_OUT 0'); // Emulates a disconnection from Redox
 
           expect(actorsList).toBeDefined(); // Actors list should have been updated
-          // Checks for actors list content
-          expect(actorsList).toHaveSize(1); // ThisALV and Redox were connected before, Redox left
-          expect(actorsList).toContain(new Actor(42, 'ThisALV'));
+          // Checks for list content
+          expectToContainExactly(actorsList as Actor[], new Actor(42, 'ThisALV'));
         });
       });
     });
@@ -578,10 +589,9 @@ describe('RptlProtocolService', () => {
           expect(statusCompleted).toBeTrue(); // Checks for unregistered-only observables to have completed
           expect(actorsList).toBeDefined(); // Value must have been pushed
           // Checks for list content
-          expect(actorsList).toHaveSize(3);
-          expect(actorsList).toContain(new Actor(42, 'ThisALV'));
-          expect(actorsList).toContain(new Actor(0, 'Redox'));
-          expect(actorsList).toContain(new Actor(8, 'Lait2Vache'));
+          expectToContainExactly(actorsList as Actor[],
+            new Actor(42, 'ThisALV'), new Actor(0, 'Redox'), new Actor(8, 'Lait2Vache')
+          );
         });
       });
     });
