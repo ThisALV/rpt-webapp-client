@@ -290,6 +290,8 @@ export class RptlProtocolService {
     // It would be useless to updated new value into subject now: as registered mode hasn't been toggled, no one is currently
     // subscribed to it.
 
+    // RPTL mode will no longer be unregistered, complete unregistered-only subjects
+    this.availability?.complete();
     // Finally, set registered mode for RPTL Protocol
     this.registeredMode = true;
   }
