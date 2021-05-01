@@ -7,7 +7,7 @@
     "build": "ng build",
     "test": "ng test",
     "lint": "ng lint",
-    "doc": "compodoc projects/rpt-webapp-client/src/lib -p tsconfig.json -d docs/"
+    "doc": "compodoc projects/rpt-webapp-client/src/lib -p tsconfig.json -d docs/ --disablePrivate"
   },
   "private": true,
   "dependencies": {
