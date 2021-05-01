@@ -1,24 +1,44 @@
-# RptWebappClient
+# rpt-webapp-client
 
-This library was generated with [Angular CLI](https://github.com/angular/angular-cli) version 11.2.11.
+## Brief
 
-## Code scaffolding
+RpT WebApp engine is a library to develop webapps which need interaction with
+other clients, like web-based games, meeting, etc.
 
-Run `ng generate component component-name --project rpt-webapp-client` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module --project rpt-webapp-client`.
-> Note: Don't forget to add `--project rpt-webapp-client` or else it will be added to the default project in your `angular.json` file. 
+It is based over RPTL Protocol, which manages current webapp session (who's logged in for example), and
+SER Protocol (standing for Service Event Request protocol) over RPTL.
 
-## Build
+Key idea is into SER Protocol : online Services might receive Requests from clients registered with RPTL
+(called *actors*) and might send them Events which notify actors about
+modifications inside current service state (i.e. : a new message inside a Chat service).
 
-Run `ng build rpt-webapp-client` to build the project. The build artifacts will be stored in the `dist/` directory.
+Basically:
+- RPTL protocol manages clients connection. It handles clients who logged in/out.
+  When a client is logged in (or *registered*) its messages are passed to overlying 
+  protocol (SER Protocol)
+- SER protocol manages interaction with registered clients (or *actors*) and
+  services. Client sends a Service Request to make an action, server responds with a Service
+  Request Response to accept or decline this action. Where something happens
+  server-side, concerned Service sends a Service Event to all actors so they
+  are synced with server.
+  
+As the whole internal webapp logic is handled by server, this library mainly
+provides support for RPTL and SER protocol, with Service facility features. 
 
-## Publishing
+To get more details about protocols specifications,
+check for [server docs](https://github.com/ThisALV/RpT-Minigames-Server).
+  
+## Install
 
-After building your library with `ng build rpt-webapp-client`, go to the dist folder `cd dist/rpt-webapp-client` and run `npm publish`.
+Install as a dependency for one of your projects:
+```shell
+npm install -S rpt-webapp-client
+```
 
-## Running unit tests
+## Get documentation
 
-Run `ng test rpt-webapp-client` to execute the unit tests via [Karma](https://karma-runner.github.io).
-
-## Further help
-
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.io/cli) page.
+Most of this library code is documented, generate to `docs/index.html`
+using:
+```shell
+npm run doc
+```
