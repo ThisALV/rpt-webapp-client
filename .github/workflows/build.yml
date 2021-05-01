@@ -1,0 +1,40 @@
+name: Build
+
+on:
+  push:
+    branches-ignore:
+      - stable
+  pull_request:
+    branches-ignore:
+      - stable
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ "ubuntu-18.04", "ubuntu-20.04", "windows-latest"]
+        build-mode: ["# non-prod", "--prod"] # On non-prod mode, comment will be append to cmd line, nothing will change
+
+    runs-on: ${{matrix.platform}}
+    name: ${{matrix.platform}} ${{matrix.build-mode}} build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup Angular CLI
+        if: matrix.platform == 'windows-latest'
+        run: npm install -g @angular/cli
+
+      - name: Setup Angular CLI (sudo)
+        if: matrix.platform != 'windows-latest' # Ubuntu platforms require sudo to install globally
+        run: sudo npm install -g @angular/cli
+
+      - name: Install package deps
+        run: npm install --production=false
+
+      - name: Build library
+        run: ng build ${{matrix.build-mode}}
+
+      - name: Run tests
+        run: ng test --sourceMap=false --browsers="ChromeHeadless,FirefoxHeadless" --watch=false
