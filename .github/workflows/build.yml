@@ -23,11 +23,11 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Setup Angular CLI
-        if: matrix.platform == "windows-latest"
+        if: matrix.platform == 'windows-latest'
         run: npm install -g @angular/cli
 
       - name: Setup Angular CLI (sudo)
-        if: matrix.platform != "windows-latest" # Ubuntu platforms require sudo to install globally
+        if: matrix.platform != 'windows-latest' # Ubuntu platforms require sudo to install globally
         run: sudo npm install -g @angular/cli
 
       - name: Install package deps
