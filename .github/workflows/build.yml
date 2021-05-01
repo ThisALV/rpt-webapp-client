@@ -36,5 +36,8 @@ jobs:
       - name: Build library
         run: ng build ${{matrix.build-mode}}
 
+      - name: Build documentation
+        run: npm run doc
+
       - name: Run tests
         run: ng test --sourceMap=false --browsers="ChromeHeadless,FirefoxHeadless" --watch=false
