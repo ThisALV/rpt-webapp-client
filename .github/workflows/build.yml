@@ -31,7 +31,7 @@ jobs:
         run: sudo npm install -g @angular/cli
 
       - name: Install package deps
-        run: npm install
+        run: npm install --production=false
 
       - name: Build library
         run: ng build ${{matrix.build-mode}}
