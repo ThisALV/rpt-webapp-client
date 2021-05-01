@@ -37,4 +37,4 @@ jobs:
         run: ng build ${{matrix.build-mode}}
 
       - name: Run tests
-        run: ng test --sourceMap=false --browsers=ChromeHeadless,FirefoxHeadless --watch=false
+        run: ng test --sourceMap=false --browsers="ChromeHeadless,FirefoxHeadless" --watch=false
