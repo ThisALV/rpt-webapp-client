@@ -59,10 +59,14 @@ export class ServiceSubject extends Subject<string> {
     if (this.commands.isStopped) { // Queues message if it cannot be sent for now
       this.serviceRequestsQueue.push(request);
     } else {
+      // UID used for this Service Request command, provided by context for all running SER services
+      const serviceRequestUid: number = this.context.generateServiceRequestUid();
+
       try {
         // Cannot be stopped, in any case, formats and sends Service Request
-        this.commands.next(`REQUEST ${this.context.generateServiceRequestUid()} ${this.serviceName} ${request}`);
+        this.commands.next(`REQUEST ${serviceRequestUid} ${this.serviceName} ${request}`);
       } catch (err: any) { // A non-stopping error will emits if request couldn't have been sent
+        this.context.done(serviceRequestUid); // Sending failed, should not wait for a response
         this.error(err);
       }
     }
