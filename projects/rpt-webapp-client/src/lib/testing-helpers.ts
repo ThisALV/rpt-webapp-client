@@ -96,6 +96,57 @@ export class MockedWebsocketSubject extends Subject<string> {
 }
 
 
+/**
+ * Mocking for `SerProtocolSubject`. next() method doesn't call observers next() callback, it instead queues given SER command into
+ * commands queue if subject isn't stopped. However handleCommand() does call observers next() callback.
+ */
+export class MockedSerProtocolSubject extends Subject<string> {
+  // Queue for sent Service Request commands
+  private commandsQueue: string[];
+
+  constructor() {
+    super();
+    this.commandsQueue = [];
+  }
+
+  /**
+   * Pushes given initialized command into commands queue if subject is not completed/errored.
+   *
+   * @param value Command to push
+   *
+   * @throws ObjectUnsubscribedError if subject was unsubscribed
+   * @throws Error if command is `undefined`
+   */
+  next(value?: string): void {
+    if (value === undefined) { // Doesn't handle uninitialized value
+      throw new Error('Command must be initialized');
+    }
+
+    if (this.closed) { // Checks for subject to not have been unsubscribed
+      throw new ObjectUnsubscribedError();
+    }
+
+    if (!this.isStopped) { // Checks for subject to not have been completed/errored
+      this.commandsQueue.unshift(`SERVICE ${value}`); // Push back message into FIFO queue
+    }
+  }
+
+  /**
+   * @param serCommand Command value which will be handled by next() observers method.
+   */
+  handleCommand(serCommand: string): void {
+    super.next(serCommand);
+  }
+
+  /**
+   * @returns Next command which have been sent, or `undefined` if there isn't any
+   */
+  nextCommand(): string | undefined {
+    return this.commandsQueue.pop();
+  }
+}
+
+
 export function unexpected(): void {
   fail('Unexpected Observable state');
 }
