@@ -88,7 +88,7 @@ export class SerProtocolService {
     // Parses SER command name, from server it can be either EVENT or RESPONSE
     const parsedSerCommand: CommandParser = new CommandParser(serCommand).parseTo([{ name: 'serCommandType', type: String }]);
 
-    switch (parsedSerCommand.parsedData.serCommandType) {
+    switch (String(parsedSerCommand.parsedData.serCommandType)) {
       case 'EVENT': // Service Event command
         // Parses involved service
         const parsedServiceEvent: CommandParser = parsedSerCommand.parseTo([{ name: 'service', type: String }]);
