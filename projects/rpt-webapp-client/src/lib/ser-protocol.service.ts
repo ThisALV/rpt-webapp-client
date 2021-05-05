@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { RptlProtocolService } from './rptl-protocol.service';
-import { Subject } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
 import { CommandParser } from './command-parser';
 import { ServiceSubject } from './service-subject';
 import { ServiceContext } from './service-context';
@@ -183,9 +183,9 @@ export class SerProtocolService {
   }
 
   /**
-   * @returns Subject calling next() callbacks for each KO-responded Service Request.
+   * @returns Observable calling next() observers callback for each KO-responded Service Request.
    */
-  getErrors(): Subject<string> {
+  getErrors(): Observable<string> {
     return this.errors;
   }
 }
