@@ -68,7 +68,7 @@ describe('SerProtocolService', () => {
       expect(() => service.bind()).toThrowError(BadSerState); // Already bound
     });
 
-    it('should bound services with SER subject and handle commands from server', () => {
+    it('should bind services with SER subject and handle commands from server', () => {
       const services: Subject<string>[] = []; // Each subject get from a SER Service registration to simulates SE receiving and SR sending
 
       for (let i = 0; i < 3; i++) { // boundWith() call expected on service subjects
@@ -98,7 +98,7 @@ describe('SerProtocolService', () => {
       });
 
       // TestingService0 refers to 1st registered Service inside array
-      mockedUnderlyingProtocol.serProtocol.next('EVENT TestingService0 a random event');
+      mockedUnderlyingProtocol.serProtocol.handleCommand('EVENT TestingService0 a random event');
 
       expect(receivedEvent).toBeDefined();
       expect(receivedEvent).toEqual('a random event'); // SE should have been received
@@ -108,7 +108,7 @@ describe('SerProtocolService', () => {
       expect(() => service.bind()).not.toThrow(); // Unbound state, can be bound without throwing error
       expect(service.isBound()).toBeTrue();
 
-      mockedUnderlyingProtocol.serProtocol.next('I am an error.'); // Receiving an ill-formed SER command
+      mockedUnderlyingProtocol.serProtocol.handleCommand('I am an error.'); // Receiving an ill-formed SER command
 
       expect(mockedUnderlyingProtocol.sessionTerminated).toBeTrue(); // RPTL endSession() should have been called when error was caught
     });
@@ -149,13 +149,13 @@ describe('SerProtocolService', () => {
     beforeEach(() => service.bind()); // Commands should only be received inside bound state
 
     it('should terminate session if SER command is neither EVENT nor RESPONSE', () => {
-      mockedUnderlyingProtocol.serProtocol.next(''); // Empty SER command
+      mockedUnderlyingProtocol.serProtocol.handleCommand(''); // Empty SER command
       expect(mockedUnderlyingProtocol.sessionTerminated).toBeTrue();
     });
 
     describe('EVENT', () => {
       it('should terminate session if Service referred by SE command does not exist', () => {
-        mockedUnderlyingProtocol.serProtocol.next('EVENT ThisServiceIsFake');
+        mockedUnderlyingProtocol.serProtocol.handleCommand('EVENT ThisServiceIsFake');
         expect(mockedUnderlyingProtocol.sessionTerminated).toBeTrue();
       });
 
@@ -169,7 +169,7 @@ describe('SerProtocolService', () => {
         });
 
         // Receives from server a Service Event happening on TestingService
-        mockedUnderlyingProtocol.serProtocol.next('EVENT TestingService    a random event');
+        mockedUnderlyingProtocol.serProtocol.handleCommand('EVENT TestingService    a random event');
 
         // Checks for next() callback to have been invoked with expected event
         expect(lastEvent).toBeDefined();
@@ -179,17 +179,17 @@ describe('SerProtocolService', () => {
 
     describe('RESPONSE', () => {
       it('should terminate session if request UID was not waiting a response', () => {
-        mockedUnderlyingProtocol.serProtocol.next('RESPONSE 0 OK');
+        mockedUnderlyingProtocol.serProtocol.handleCommand('RESPONSE 0 OK');
         expect(mockedUnderlyingProtocol.sessionTerminated).toBeTrue();
       });
 
       it('should marks UID as done if response is OK', () => {
         // Sends a SR command to TestingService which will have request UID 0
         service.register('TestingService').next('a random request');
-        mockedUnderlyingProtocol.serProtocol.next('RESPONSE 0 OK');
+        mockedUnderlyingProtocol.serProtocol.handleCommand('RESPONSE 0 OK');
         expect(mockedUnderlyingProtocol.sessionTerminated).toBeFalse(); // Right request UID, no SER protocol error
 
-        mockedUnderlyingProtocol.serProtocol.next('RESPONSE 0 OK'); // SER protocol error, 0 responded, should ne longer be waiting
+        mockedUnderlyingProtocol.serProtocol.handleCommand('RESPONSE 0 OK'); // SER protocol error, 0 responded, should ne longer be waiting
         expect(mockedUnderlyingProtocol.sessionTerminated).toBeTrue(); // Expect error to have occurred as UID 0 should no longer be waiting
       });
 
@@ -205,10 +205,10 @@ describe('SerProtocolService', () => {
 
         // Sends a SR command to TestingService which will have request UID 0
         service.register('TestingService').next('a random request');
-        mockedUnderlyingProtocol.serProtocol.next('RESPONSE 0 KO        a random error');
+        mockedUnderlyingProtocol.serProtocol.handleCommand('RESPONSE 0 KO        a random error');
         expect(mockedUnderlyingProtocol.sessionTerminated).toBeFalse(); // Right request UID, no SER protocol error
 
-        mockedUnderlyingProtocol.serProtocol.next('RESPONSE 0 OK'); // SER protocol error, 0 responded, should ne longer be waiting
+        mockedUnderlyingProtocol.serProtocol.handleCommand('RESPONSE 0 OK'); // SER protocol error, 0 responded, should ne longer be waiting
         expect(mockedUnderlyingProtocol.sessionTerminated).toBeTrue(); // Expect error to have occurred as UID 0 should no longer be waiting
 
         // Checks for errors next() callback to have been invoked by handleCommand() with error message received from server
