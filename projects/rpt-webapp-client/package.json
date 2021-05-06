@@ -7,8 +7,5 @@
   },
   "dependencies": {
     "tslib": "^2.0.0"
-  },
-  "devDependencies": {
-    "ngx-deploy-npm": "^2.0.0"
   }
 }
