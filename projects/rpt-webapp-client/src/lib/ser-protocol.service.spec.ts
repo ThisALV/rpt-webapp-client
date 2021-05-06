@@ -9,7 +9,7 @@ import { RptlProtocolService } from './rptl-protocol.service';
  * Mocking for `RptlProtocolService` providing an accessible `MockedSerProtocolSubject` which can be checked for, and a way to terminate
  * connection with server using mocked `endSession()` method.
  */
-export class MockedRptlProtocol {
+class MockedRptlProtocol {
   /**
    * Mocks SER commands sending and receiving to/from server.
    */
