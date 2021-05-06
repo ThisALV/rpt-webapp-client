@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: NPM authentication
-        run: echo '//registry.npmjs.org/:_authToken=${NPM_TOKEN}' > .npmrc
+        run: npm config set '//registry.npmjs.org/:_authToken' '${NPM_TOKEN}'
 
       - name: Setup Angular CLI # Sudo because running on Ubuntu
         run: sudo npm install -g @angular/cli
