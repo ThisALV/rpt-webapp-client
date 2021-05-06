@@ -1,0 +1,27 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - stable
+
+jobs:
+  deploy:
+    # This is a one-shot task, not a testing routine, it should only be done once and on a single available platform
+    runs-on: ubuntu-latest
+    name: Deploy as NPM package
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup Angular CLI # Sudo because running on Ubuntu
+        run: sudo npm install -g @angular/cli
+
+      - name: Install package deps (without dev deps)
+        run: npm install --production=true
+
+      - name: Run tests # Must be sure of library validity before publishing it to NPM
+        run: ng test --sourceMap=false --browsers="ChromeHeadless,FirefoxHeadless" --watch=false
+
+      - name: Deploy library
+        run: ng deploy
