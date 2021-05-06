@@ -16,6 +16,8 @@ jobs:
 
       - name: NPM authentication
         run: npm config set '//registry.npmjs.org/:_authToken' '${NPM_TOKEN}'
+        env:
+          NPM_TOKEN: ${{secrets.NPM_TOKEN}}
 
       - name: Setup Angular CLI # Sudo because running on Ubuntu
         run: sudo npm install -g @angular/cli
