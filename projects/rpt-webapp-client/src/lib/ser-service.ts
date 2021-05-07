@@ -10,7 +10,7 @@ export class SerService {
    * Provides subject to send Service Requests and receive Service Events.
    * @protected
    */
-  protected serviceSubject: Subject<string>;
+  protected readonly serviceSubject: Subject<string>;
 
   /**
    * Should be called inside children constructor to make Service registered inside SER Protocol and provides SER Service subject.
