@@ -29,7 +29,7 @@ describe('RptlProtocolService', () => {
    *
    * @returns `value` field assigned to `true` when a new state has been pushed, expected or not
    */
-  function expectStateToBeUpdate(expectedState: RptlState): SharedBoolean {
+  function expectStateToBeUpdated(expectedState: RptlState): SharedBoolean {
     const updated: SharedBoolean = new SharedBoolean();
 
     service.getState().subscribe({
@@ -96,7 +96,7 @@ describe('RptlProtocolService', () => {
     });
 
     it('should run session and notify new state if it is not already running', () => {
-      const hasNotifiedState: SharedBoolean = expectStateToBeUpdate(RptlState.UNREGISTERED);
+      const hasNotifiedState: SharedBoolean = expectStateToBeUpdated(RptlState.UNREGISTERED);
 
       expect(() => service.beginSession(mockedWsConnection)).not.toThrow();
       expect(service.isSessionRunning()).toBeTrue();
@@ -110,7 +110,7 @@ describe('RptlProtocolService', () => {
     });
 
     it('should stop session and notify new state when connection is completed', () => {
-      const hasNotifiedState: SharedBoolean = expectStateToBeUpdate(RptlState.DISCONNECTED);
+      const hasNotifiedState: SharedBoolean = expectStateToBeUpdated(RptlState.DISCONNECTED);
 
       service.beginSession(mockedWsConnection);
       expect(service.isSessionRunning()).toBeTrue();
@@ -121,7 +121,7 @@ describe('RptlProtocolService', () => {
     });
 
     it('should stop session and notify new state when connection is errored', () => {
-      const hasNotifiedState: SharedBoolean = expectStateToBeUpdate(RptlState.DISCONNECTED);
+      const hasNotifiedState: SharedBoolean = expectStateToBeUpdated(RptlState.DISCONNECTED);
 
       service.beginSession(mockedWsConnection);
       expect(service.isSessionRunning()).toBeTrue();
@@ -151,7 +151,7 @@ describe('RptlProtocolService', () => {
     });
 
     it('should stop session into unregistered mode', () => {
-      const hasNotifiedState: SharedBoolean = expectStateToBeUpdate(RptlState.DISCONNECTED);
+      const hasNotifiedState: SharedBoolean = expectStateToBeUpdated(RptlState.DISCONNECTED);
 
       service.beginSession(mockedWsConnection);
 
@@ -371,7 +371,7 @@ describe('RptlProtocolService', () => {
         beforeEach(() => serProtocol = service.getSerProtocol());
 
         it('should clear session with error if message is provided and notify new state', () => {
-          const hasNotifiedState: SharedBoolean = expectStateToBeUpdate(RptlState.DISCONNECTED);
+          const hasNotifiedState: SharedBoolean = expectStateToBeUpdated(RptlState.DISCONNECTED);
 
           mockedWsConnection.fromServer('INTERRUPT   An error occurred'); // Emulates interruption from server with an error message
           mockedWsConnection.closeFromServer(); // Emulates WS close frame from server, no matter the reason
@@ -400,7 +400,7 @@ describe('RptlProtocolService', () => {
         });
 
         it('should clear session normally if message is not provided and notify new state', () => {
-          const hasNotifiedState: SharedBoolean = expectStateToBeUpdate(RptlState.DISCONNECTED);
+          const hasNotifiedState: SharedBoolean = expectStateToBeUpdated(RptlState.DISCONNECTED);
 
           mockedWsConnection.fromServer('INTERRUPT'); // Emulates interruption from server without any error message
           mockedWsConnection.closeFromServer(); // Emulates WS close frame from server, no matter the reason
@@ -516,7 +516,7 @@ describe('RptlProtocolService', () => {
 
       describe('REGISTRATION', () => {
         it('should notify new state, add all received actors to list and complete status observable', () => {
-          const hasNotifiedState: SharedBoolean = expectStateToBeUpdate(RptlState.REGISTERED);
+          const hasNotifiedState: SharedBoolean = expectStateToBeUpdated(RptlState.REGISTERED);
 
           let statusCompleted = false;
           service.getStatus().subscribe({ // Expect observable to be completed() as RPTL mode will be set to registered
