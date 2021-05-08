@@ -69,9 +69,21 @@ const WS_INTERNAL_ERROR = 1011;
 
 
 /**
+ * Values notifying `RptlProtocolService` state observers about its current state:
+ * - `DISCONNECTED`: Session isn't running, not connected to any server
+ * - `UNREGISTERED`: Session is running, connected to a server but client isn't registered as an actor
+ * - `REGISTERED`: Session is running, connected to a server with client registered as an actor
+ */
+export enum RptlState {
+  DISCONNECTED, UNREGISTERED, REGISTERED
+}
+
+
+/**
  * Implements RPTL protocol through its messaging interface which is a strings subject to send and receive RPTL messages.
  *
  * Provides observables to listen for the following updated values:
+ * - Current `RptlState`
  * - Actors data if registered
  * - SER Protocol commands if registered
  * - Server availability if unregistered
@@ -90,6 +102,8 @@ export class RptlProtocolService {
   private readonly registeredCommandHandlers: CommandHandlers;
   // Same for unregistered mode
   private readonly unregisteredCommandHandlers: CommandHandlers;
+  // Provided can observe current state to update their app (if some component should only be there inside registered mode for example)
+  private readonly currentState: Subject<RptlState>;
 
   // RPTL protocol mode (registered/unregistered)
   private registeredMode: boolean;
@@ -110,6 +124,9 @@ export class RptlProtocolService {
    * Constructs service not connected to any server as unregistered RPTL protocol mode.
    */
   constructor() {
+    // Current state should be updated all along Angular Service lifetime
+    this.currentState = new Subject<RptlState>();
+
     this.registeredMode = false;
     this.messagingInterface = new Subject<string>(); // Sending/receiving message when not connected doesn't do anything
 
@@ -132,6 +149,25 @@ export class RptlProtocolService {
   }
 
   /**
+   * Calls next() observers callback for `currentState` with current `RptlState`.
+   *
+   * @private
+   */
+  private notifyState(): void {
+    let state: RptlState;
+
+    if (!this.isSessionRunning()) { // If session isn't running, then RPTL is neither registered nor unregistered as it hasn't begun
+      state = RptlState.DISCONNECTED;
+    } else if (!this.isRegistered()) { // If RPTL has begun, checks for RPTL current mode
+      state = RptlState.UNREGISTERED;
+    } else {
+      state = RptlState.REGISTERED;
+    }
+
+    this.currentState.next(state);
+  }
+
+  /**
    * When connection is closed, completes/errors every subject depending on optional error argument
    *
    * @param error Message for session end error cause, if any
@@ -149,6 +185,9 @@ export class RptlProtocolService {
       this.actors?.complete();
       this.availability?.complete();
     }
+
+    // Connection is finally closed, subjects are no longer available
+    this.notifyState();
   }
 
   /**
@@ -294,6 +333,9 @@ export class RptlProtocolService {
     this.availability?.complete();
     // Finally, set registered mode for RPTL Protocol
     this.registeredMode = true;
+
+    // Every subject is ready, observers can now perform RPTL registered-only operations
+    this.notifyState();
   }
 
   /**
@@ -352,6 +394,7 @@ export class RptlProtocolService {
     // Listen and send RPTL messages from new session connection
     this.messagingInterface = connection;
     const context: RptlProtocolService = this;
+
     connection.subscribe({
       next(rptlMessage: string): void { // Handle every received message
         console.log(`Recv message: ${rptlMessage}`);
@@ -374,6 +417,9 @@ export class RptlProtocolService {
         context.clearSession();
       }
     });
+
+    // Must be sure that connection has begun with subscribe() before notifying observers about RPTL connection
+    this.notifyState();
   }
 
   /**
@@ -390,6 +436,13 @@ export class RptlProtocolService {
       this.messagingInterface.complete(); // Unregistered, directly send WS close frame
       this.clearSession(); // User requested end, no error provided
     }
+  }
+
+  /**
+   * @returns Observable with a new `RptlState` value each time RPTL protocol disconnects, connects or registers to server
+   */
+  getState(): Observable<RptlState> {
+    return this.currentState;
   }
 
   /**
