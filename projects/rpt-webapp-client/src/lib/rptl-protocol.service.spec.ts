@@ -1,15 +1,60 @@
 import { TestBed } from '@angular/core/testing';
 import { expectToBeErrored, expectToContainExactly, MockedWebsocketSubject, unexpected } from './testing-helpers';
-import { BadConnectionSubject, BadRptlMode, BadSessionState, RptlProtocolService } from './rptl-protocol.service';
+import { BadConnectionSubject, BadRptlMode, BadSessionState, RptlProtocolService, RptlState } from './rptl-protocol.service';
 import { Subject } from 'rxjs';
 import { Actor } from './actor';
 import { Availability } from './availability';
+
+
+/**
+ * Boolean which can be returned then modified into callbacks called from function which returned it.
+ */
+class SharedBoolean {
+  value: boolean;
+
+  constructor() {
+    this.value = false;
+  }
+}
 
 
 describe('RptlProtocolService', () => {
   let service: RptlProtocolService;
   let mockedWsConnection: MockedWebsocketSubject;
 
+  /**
+   * Expects `service` to switch state into given `RtplState`.
+   *
+   * @param expectedState `RptlState` RPTL protocol must switch into
+   *
+   * @returns `value` field assigned to `true` when a new state has been pushed, expected or not
+   */
+  function expectStateToBeUpdated(expectedState: RptlState): SharedBoolean {
+    const updated: SharedBoolean = new SharedBoolean();
+
+    service.getState().subscribe({
+      next: (newState: RptlState): void => { // Expects a new value to be pushed
+        updated.value = true; // next() has been called
+        expect(newState).toEqual(expectedState);
+      },
+
+      error: unexpected,
+      complete: unexpected
+    });
+
+    return updated;
+  }
+
+  /**
+   * Expects `getState()` observers to not handle any `RptlState` value.
+   */
+  function expectStateToNotBeUpdated(): void {
+    service.getState().subscribe({
+      next: unexpected,
+      error: unexpected,
+      complete: unexpected
+    });
+  }
 
   /**
    * Puts service session into registered with own actor [42] ThisALV and one already connected actor [0] Redox.
@@ -50,9 +95,12 @@ describe('RptlProtocolService', () => {
       expect(service.isSessionRunning()).toBeFalse();
     });
 
-    it('should run session if it is not already running', () => {
+    it('should run session and notify new state if it is not already running', () => {
+      const hasNotifiedState: SharedBoolean = expectStateToBeUpdated(RptlState.UNREGISTERED);
+
       expect(() => service.beginSession(mockedWsConnection)).not.toThrow();
       expect(service.isSessionRunning()).toBeTrue();
+      expect(hasNotifiedState.value).toBeTrue(); // State must have been updated, so new state value has already been checked
     });
 
     it('should throw if session is already running', () => {
@@ -61,20 +109,28 @@ describe('RptlProtocolService', () => {
       expect(service.isSessionRunning()).toBeTrue(); // Should not have stopped current session
     });
 
-    it('should stop session when connection is completed', () => {
+    it('should stop session and notify new state when connection is completed', () => {
       service.beginSession(mockedWsConnection);
       expect(service.isSessionRunning()).toBeTrue();
+
+      // RPTL state is now unregistered and should switch back to disconnected
+      const hasNotifiedState: SharedBoolean = expectStateToBeUpdated(RptlState.DISCONNECTED);
 
       mockedWsConnection.complete();
       expect(service.isSessionRunning()).toBeFalse();
+      expect(hasNotifiedState.value).toBeTrue();
     });
 
-    it('should stop session when connection is errored', () => {
+    it('should stop session and notify new state when connection is errored', () => {
       service.beginSession(mockedWsConnection);
       expect(service.isSessionRunning()).toBeTrue();
 
+      // RPTL state is now unregistered and should switch back to disconnected
+      const hasNotifiedState: SharedBoolean = expectStateToBeUpdated(RptlState.DISCONNECTED);
+
       mockedWsConnection.error({ message: 'A random error' });
       expect(service.isSessionRunning()).toBeFalse();
+      expect(hasNotifiedState.value).toBeTrue(); // State must have been updated, so new state value has already been checked
     });
   });
 
@@ -87,6 +143,9 @@ describe('RptlProtocolService', () => {
       service.beginSession(mockedWsConnection);
       mockRegistration();
 
+      // RPTL state is now registered, registration already happen and no update on state should happen since now
+      expectStateToNotBeUpdated(); // LOGOUT command is sent to wait for `INTERRUPT` from server, should not disconnect immediately
+
       expect(() => service.endSession()).not.toThrow();
       expect(service.isSessionRunning()).toBeTrue(); // Session should still be running, waiting for server to close connection
 
@@ -97,11 +156,15 @@ describe('RptlProtocolService', () => {
     it('should stop session into unregistered mode', () => {
       service.beginSession(mockedWsConnection);
 
+      // RPTL state is now registered, registration already happen and next state should be disconnection with endSession() call
+      const hasNotifiedState: SharedBoolean = expectStateToBeUpdated(RptlState.DISCONNECTED);
+
       expect(() => service.endSession()).not.toThrow();
       expect(service.isSessionRunning()).toBeFalse(); // Unregistered, connection should be closed immediately
       // Checks for close frame sent by client, as client should have initiated disconnection because it wasn't registered
       expect(mockedWsConnection.closureReason).toBeDefined();
       expect(mockedWsConnection.closureReason).toEqual({ code: 1000 });
+      expect(hasNotifiedState.value).toBeTrue(); // State must have been updated to DISCONNECTED as endSession() closed connection
     });
   });
 
@@ -266,6 +329,9 @@ describe('RptlProtocolService', () => {
     it('should send handshake command if session is running into unregistered mode', () => {
       service.beginSession(mockedWsConnection);
 
+      // RPTL state is now unregistered, it should ne longer be updated
+      expectStateToNotBeUpdated(); // Handshake command has been sent, waiting for server REGISTRATION command to enter registered mode
+
       expect(() => service.register(42, 'ThisALV')).not.toThrow(); // Registration should be done successfully
       expect(mockedWsConnection.nextMessage()).toEqual('LOGIN 42 ThisALV'); // Checks for command sent by client
     });
@@ -309,7 +375,9 @@ describe('RptlProtocolService', () => {
         // SER subject is required to check for session to have been completed or errored
         beforeEach(() => serProtocol = service.getSerProtocol());
 
-        it('should clear session with error if message is provided', () => {
+        it('should clear session with error if message is provided and notify new state', () => {
+          const hasNotifiedState: SharedBoolean = expectStateToBeUpdated(RptlState.DISCONNECTED);
+
           mockedWsConnection.fromServer('INTERRUPT   An error occurred'); // Emulates interruption from server with an error message
           mockedWsConnection.closeFromServer(); // Emulates WS close frame from server, no matter the reason
 
@@ -331,9 +399,14 @@ describe('RptlProtocolService', () => {
           expect(connectionClosed).toBeTrue();
           expect(sessionError).toEqual({ message: 'An error occurred' }); // Closed because of an internal error
           expect(mockedWsConnection.closureReason).toBeUndefined(); // Closed by server, no client-side close frame expected
+
+          // INTERRUPT command means closing connection, so complete/error calls clearSession() which notifies new state
+          expect(hasNotifiedState.value).toBeTrue();
         });
 
-        it('should clear session normally if message is not provided', () => {
+        it('should clear session normally if message is not provided and notify new state', () => {
+          const hasNotifiedState: SharedBoolean = expectStateToBeUpdated(RptlState.DISCONNECTED);
+
           mockedWsConnection.fromServer('INTERRUPT'); // Emulates interruption from server without any error message
           mockedWsConnection.closeFromServer(); // Emulates WS close frame from server, no matter the reason
 
@@ -355,6 +428,9 @@ describe('RptlProtocolService', () => {
           expect(connectionClosed).toBeTrue();
           expect(sessionCompleted).toBeTrue(); // Closed because of a regular client disconnection
           expect(mockedWsConnection.closureReason).toBeUndefined(); // Closed by server, no client-side close frame expected
+
+          // INTERRUPT command means closing connection, so complete/error calls clearSession() which notifies new state
+          expect(hasNotifiedState.value).toBeTrue();
         });
       });
 
@@ -444,7 +520,9 @@ describe('RptlProtocolService', () => {
       });
 
       describe('REGISTRATION', () => {
-        it('should set registered RPTL mode, add all received actors to list and complete status observable', () => {
+        it('should notify new state, add all received actors to list and complete status observable', () => {
+          const hasNotifiedState: SharedBoolean = expectStateToBeUpdated(RptlState.REGISTERED);
+
           let statusCompleted = false;
           service.getStatus().subscribe({ // Expect observable to be completed() as RPTL mode will be set to registered
             next: unexpected,
@@ -470,6 +548,9 @@ describe('RptlProtocolService', () => {
           expectToContainExactly(actorsList as Actor[],
             new Actor(42, 'ThisALV'), new Actor(0, 'Redox'), new Actor(8, 'Lait2Vache')
           );
+
+          // REGISTRATION command is actually confirming client registration, registered mode entered
+          expect(hasNotifiedState.value).toBeTrue();
         });
       });
     });
