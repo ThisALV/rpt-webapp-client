@@ -185,9 +185,6 @@ export class RptlProtocolService {
       this.actors?.complete();
       this.availability?.complete();
     }
-
-    // Connection is finally closed, subjects are no longer available
-    this.notifyState();
   }
 
   /**
@@ -225,6 +222,8 @@ export class RptlProtocolService {
   }
 
   private handleInterruptCommand(parsedCommand: CommandParser): void {
+
+
     if (parsedCommand.unparsed.length === 0) {
       this.clearSession();
     } else { // If any error message argument is provided, then dispatch error too
@@ -410,11 +409,15 @@ export class RptlProtocolService {
       error(err: any): void { // Any connection error is fatal and must stop current session
         console.error(`Session error: ${err.message}`);
         context.clearSession(err.message);
+
+        context.notifyState();
       },
 
       complete(): void { // Stop current session if connection was closed
         console.log('Session end');
         context.clearSession();
+
+        context.notifyState(); // Any connection closure will lead to this callback, we're sure that DISCONNECTED state will be noticed
       }
     });
 
