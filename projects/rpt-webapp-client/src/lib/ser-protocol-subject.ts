@@ -34,7 +34,10 @@ export class SerProtocolSubject extends Subject<string> {
     }
 
     if (!this.isStopped) { // Checks for subject to not have been completed/errored
-      this.messagingInterface.next(`SERVICE ${serCommand}`);
+      const rptlMessage = `SERVICE ${serCommand}`; // Formats RPTL message to send with SERVICE RPTL command
+
+      console.log(rptlMessage);
+      this.messagingInterface.next(rptlMessage);
     }
   }
 
