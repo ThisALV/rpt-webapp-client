@@ -127,7 +127,10 @@ export class MockedSerProtocolSubject extends Subject<string> {
     }
 
     if (!this.isStopped) { // Checks for subject to not have been completed/errored
-      this.commandsQueue.unshift(`SERVICE ${value}`); // Push back message into FIFO queue
+      const rptlMessage = `SERVICE ${value}`; // Formats RPTL message to send
+
+      console.log(`Send message: ${rptlMessage}`);
+      this.commandsQueue.unshift(rptlMessage); // Push back message into FIFO queue
     }
   }
 
