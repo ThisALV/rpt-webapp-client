@@ -4,6 +4,7 @@
 
 export * from './lib/rpt-webapp-client.module';
 export * from './lib/actor';
+export * from './lib/availability';
 export * from './lib/command-parser';
 export * from './lib/rptl-protocol.service';
 export * from './lib/ser-protocol.service';
