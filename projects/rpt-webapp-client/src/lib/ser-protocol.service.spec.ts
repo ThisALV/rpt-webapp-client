@@ -1,13 +1,14 @@
 import { TestBed } from '@angular/core/testing';
-import { BadSerState, SerProtocolService, UnavailableServiceName } from './ser-protocol.service';
-import { Subject } from 'rxjs';
+import { SerProtocolService, UnavailableServiceName } from './ser-protocol.service';
+import { Observable, Subject } from 'rxjs';
 import { MockedSerProtocolSubject, unexpected } from './testing-helpers';
-import { RptlProtocolService } from './rptl-protocol.service';
+import { RptlProtocolService, RptlState } from './rptl-protocol.service';
 
 
 /**
- * Mocking for `RptlProtocolService` providing an accessible `MockedSerProtocolSubject` which can be checked for, and a way to terminate
- * connection with server using mocked `endSession()` method.
+ * Mocking for `RptlProtocolService` providing an accessible `MockedSerProtocolSubject` which can be checked for, a way to terminate
+ * connection with server using mocked `endSession()` method and a way to mock a `RptlState.REGISTERED` event with it's controlled
+ * subject `state`.
  */
 class MockedRptlProtocol {
   /**
@@ -16,13 +17,19 @@ class MockedRptlProtocol {
   serProtocol: MockedSerProtocolSubject;
 
   /**
-   * Checks if endSession() has been called
+   * Checks if endSession() has been called.
    */
   sessionTerminated: boolean;
+
+  /**
+   * Mocks RPTL protocol updated state current state.
+   */
+  state: Subject<RptlState>;
 
   constructor() {
     this.serProtocol = new MockedSerProtocolSubject();
     this.sessionTerminated = false;
+    this.state = new Subject<RptlState>();
   }
 
   getSerProtocol(): Subject<string> {
@@ -31,6 +38,10 @@ class MockedRptlProtocol {
 
   endSession(): void {
     this.sessionTerminated = true;
+  }
+
+  getState(): Observable<RptlState> {
+    return this.state;
   }
 }
 
@@ -54,21 +65,13 @@ describe('SerProtocolService', () => {
     service = TestBed.inject(SerProtocolService);
   });
 
-  it('should be created', () => {
-    expect(service).toBeTruthy();
-  });
-
-  it('should be constructed as unbound', () => {
-    expect(service.isBound()).toBeFalse();
-  });
-
-  describe('bind()', () => {
-    it('should throw if it is already bound', () => {
-      service.bind(); // Puts into bound state
-      expect(() => service.bind()).toThrowError(BadSerState); // Already bound
+  describe('constructor()', () => {
+    it('should be created as unbound', () => {
+      expect(service).toBeTruthy();
+      expect(service.isBound()).toBeFalse();
     });
 
-    it('should bind services with SER subject and handle commands from server', () => {
+    it('should automatically bind service with SER subject and handle commands from server', () => {
       const services: Subject<string>[] = []; // Each subject get from a SER Service registration to simulates SE receiving and SR sending
 
       for (let i = 0; i < 3; i++) { // boundWith() call expected on service subjects
@@ -81,8 +84,9 @@ describe('SerProtocolService', () => {
       services[2].next('command 3');
 
       expect(mockedUnderlyingProtocol.serProtocol.nextCommand()).toBeUndefined(); // No commands should have been sent inside unbound state
-      expect(() => service.bind()).not.toThrow(); // Unbound state, can be bound without throwing error
-      expect(service.isBound()).toBeTrue();
+
+      mockedUnderlyingProtocol.state.next(RptlState.REGISTERED); // Mocks server registration to go into RPTL registered mode
+      expect(service.isBound()).toBeTrue(); // It should have bound automatically
 
       // Checks for Services to have been bound with boundWith() method
       expect(mockedUnderlyingProtocol.serProtocol.nextCommand()).toEqual('SERVICE REQUEST 0 TestingService1 command 1');
@@ -105,7 +109,7 @@ describe('SerProtocolService', () => {
     });
 
     it('should terminate RPTL session if an SER protocol level error occurs', () => {
-      expect(() => service.bind()).not.toThrow(); // Unbound state, can be bound without throwing error
+      mockedUnderlyingProtocol.state.next(RptlState.REGISTERED); // Binds SER protocol service
       expect(service.isBound()).toBeTrue();
 
       mockedUnderlyingProtocol.serProtocol.handleCommand('I am an error.'); // Receiving an ill-formed SER command
@@ -146,7 +150,8 @@ describe('SerProtocolService', () => {
   });
 
   describe('Commands handling', () => {
-    beforeEach(() => service.bind()); // Commands should only be received inside bound state
+    // Commands should only be received inside bound state
+    beforeEach(() => mockedUnderlyingProtocol.state.next(RptlState.REGISTERED));
 
     it('should terminate session if SER command is neither EVENT nor RESPONSE', () => {
       mockedUnderlyingProtocol.serProtocol.handleCommand(''); // Empty SER command

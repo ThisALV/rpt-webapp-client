@@ -1,10 +1,11 @@
 import { Injectable } from '@angular/core';
-import { RptlProtocolService } from './rptl-protocol.service';
+import { RptlProtocolService, RptlState } from './rptl-protocol.service';
 import { Observable, Subject } from 'rxjs';
 import { CommandParser } from './command-parser';
 import { ServiceSubject } from './service-subject';
 import { ServiceContext } from './service-context';
 import { ServiceRequestResponse } from './service-request-response';
+import { filter } from 'rxjs/operators';
 
 
 /**
@@ -16,19 +17,6 @@ export class UnavailableServiceName extends Error {
    */
   constructor(alreadyUsedName: string) {
     super(`Service name ${alreadyUsedName} is already registered`);
-  }
-}
-
-
-/**
- * Thrown by `SerProtocolService` methods when invoked into inappropriate state.
- */
-export class BadSerState extends Error {
-  /**
-   * @param shouldBeBound `true` if service should have been bound to perform this action, `false` otherwise
-   */
-  constructor(shouldBeBound: boolean) {
-    super(shouldBeBound ? 'Expected SER protocol bound to underlying RPTL protocol' : 'Did not expect SER protocol to be bound yet');
   }
 }
 
@@ -49,8 +37,9 @@ export class BadSerCommand extends Error {
 /**
  * Implements SER Protocol over injected RPTL protocol.
  *
- * A SER Protocol service instance is constructed as not bound. When RPTL protocol client is registered, `bind()` call is expected to
- * listen for `SERVICE` commands emitted by server and to allow sending SER commands to server.
+ * A SER Protocol service instance is constructed as not bound. When RPTL protocol client is registered, this Angular service is
+ * automatically bound with RPTL underlying protocol to listen for `SERVICE` commands emitted by server and to allow sending SER commands
+ * to server.
  *
  * For a SER service to use SER Protocol, an instance of this Angular service must be injected into Angular service of required SER
  * service. At construction, SER service (implemented with an Angular service) must call `register()` with service name passed as
@@ -82,6 +71,12 @@ export class SerProtocolService {
 
     // At construction, state is unbound, so no matter if subject is truth or mocked, it only needs to be stopped
     this.commands.complete();
+
+    // This service must be automatically bound to RPTL protocol as soon as it is registered <=> as soon as SER commands can be
+    // exchanged with server
+    this.underlyingProtocol.getState().pipe(filter((newState: RptlState) => newState === RptlState.REGISTERED)).subscribe({
+      next: () => this.bind() // Will be automatically unbound when connection will be stopped
+    });
   }
 
   private handleCommand(serCommand: string): void {
@@ -123,23 +118,8 @@ export class SerProtocolService {
     }
   }
 
-  /**
-   * @returns `true` is instance is bound, `false` otherwise
-   */
-  isBound(): boolean {
-    return !this.commands.isStopped; // A bound instance is owning an active (non-stopped) subject to send and receive SER commands
-  }
-
-  /**
-   * Sets Angular service to bound state, where it listens for SE and SRR commands, and sends SR commands to server.
-   *
-   * @throws BadSerState if already bound
-   */
-  bind(): void {
-    if (this.isBound()) {
-      throw new BadSerState(false);
-    }
-
+  /// Sets Angular service to bound state, where it listens for SE and SRR commands, and sends SR commands to server.
+  private bind(): void {
     this.commands = this.underlyingProtocol.getSerProtocol(); // Bound, must initialize commands subject
 
     for (const registeredService in this.services) { // A new SER protocol subject is available, receive/send from/to it for services
@@ -160,6 +140,13 @@ export class SerProtocolService {
         }
       }
     });
+  }
+
+  /**
+   * @returns `true` is instance is bound, `false` otherwise
+   */
+  isBound(): boolean {
+    return !this.commands.isStopped; // A bound instance is owning an active (non-stopped) subject to send and receive SER commands
   }
 
   /**
