@@ -77,6 +77,11 @@ export class SerProtocolService {
     this.underlyingProtocol.getState().pipe(filter((newState: RptlState) => newState === RptlState.REGISTERED)).subscribe({
       next: () => this.bind() // Will be automatically unbound when connection will be stopped
     });
+
+    // If already registered at 1st injection, binds immediately
+    if (this.underlyingProtocol.isSessionRunning() && this.underlyingProtocol.isRegistered()) {
+      this.bind();
+    }
   }
 
   private handleCommand(serCommand: string): void {
