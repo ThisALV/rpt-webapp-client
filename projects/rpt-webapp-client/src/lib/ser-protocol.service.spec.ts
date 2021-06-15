@@ -8,7 +8,7 @@ import { RptlProtocolService, RptlState } from './rptl-protocol.service';
 /**
  * Mocking for `RptlProtocolService` providing an accessible `MockedSerProtocolSubject` which can be checked for, a way to terminate
  * connection with server using mocked `endSession()` method and a way to mock a `RptlState.REGISTERED` event with it's controlled
- * subject `state`.
+ * subject `state`. This mock is always considered not running and unregistered to test the case when it is not bound at 1st injection.
  */
 class MockedRptlProtocol {
   /**
@@ -42,6 +42,15 @@ class MockedRptlProtocol {
 
   getState(): Observable<RptlState> {
     return this.state;
+  }
+
+  /// The case where
+  isSessionRunning(): boolean {
+    return false;
+  }
+
+  isRegistered(): boolean {
+    return false;
   }
 }
 
